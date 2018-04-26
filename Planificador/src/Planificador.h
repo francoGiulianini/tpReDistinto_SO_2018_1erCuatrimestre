@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <commons/log.h>
+#include <commons/config.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/select.h>
@@ -21,6 +22,7 @@
 int stop; //variables globales
 t_log * logger;
 
+void exit_with_error(t_log* logger, char* error_message);
 void configure_logger();
 void *HostConnections(void * parameter);
 

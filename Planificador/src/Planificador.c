@@ -13,14 +13,28 @@
 pthread_t idConsole;
 pthread_t idHostConnections;
 struct sockaddr_in serverAddress;
+t_config* config;
+int listeningPort;
 
 int main(void)
 {
 	configure_logger();
 
+    config = config_create("Config.cfg");
+    if(config == NULL)
+        exit_with_error(logger, "Cannot open config file");
+
+    if(config_has_property(config, "PuertoEscucha"))
+        {
+            listeningPort = config_get_int_value(config, "PuertoEscucha");
+            log_info(logger, "Port from config file: %d", listeningPort);
+        }
+    else
+        exit_with_error(logger, "Cannot read port from config file");
+
 	serverAddress.sin_family = AF_INET;
-	serverAddress.sin_addr.s_addr = INADDR_ANY; //leer de archivo de config
-	serverAddress.sin_port = htons(8080);
+	serverAddress.sin_addr.s_addr = INADDR_ANY;
+	serverAddress.sin_port = htons(listeningPort);
 
 	int error = pthread_create(&idConsole, NULL, Console, NULL);
 
@@ -45,7 +59,15 @@ int main(void)
 		
 	}
 
+    log_destroy(logger);
 	return EXIT_SUCCESS;
+}
+
+void exit_with_error(t_log* logger, char* error_message)
+{
+    log_error(logger, error_message);
+    log_destroy(logger);
+    exit(EXIT_FAILURE);
 }
 
 void configure_logger()
@@ -71,20 +93,14 @@ void *HostConnections(void * parameter)
 
 	master_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (master_socket < 0)
-	{
-		log_error(logger, "Failed to create Socket");
-		exit(-1);
-	}
+		exit_with_error(logger, "Failed to create Socket");
 
 	int activated = 1;
 
 	setsockopt(master_socket, SOL_SOCKET, SO_REUSEADDR, &activated, sizeof(activated));
 
 	if (bind(master_socket, (void *)&serverAddress, sizeof(serverAddress)) != 0)
-	{
-		log_error(logger, "Failed to bind");
-		exit(-1);
-	}
+		exit_with_error(logger, "Failed to bind");
 
 	log_info(logger, "Waiting for connections...");
 	listen(master_socket, 100);
