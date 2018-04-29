@@ -30,7 +30,7 @@ int main(void) {
     else
         exit_with_error(logger, "Cannot read port from config file");
         
-    	memset(&hints, 0, sizeof(hints));
+    memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_flags = AI_PASSIVE;
 	hints.ai_socktype = SOCK_STREAM;
@@ -44,9 +44,9 @@ int main(void) {
 	struct sockaddr_in addr;
 	socklen_t addrlen = sizeof(addr);
 
-	int socketESI = accept(listenningSocket, (struct sockaddr *) &addr, &addrlen);					/*	Hasta aca estaría escuchando al ESI	*/
+	int socketESI = accept(listeningSocket, (struct sockaddr *) &addr, &addrlen);					/*	Hasta aca estarï¿½a escuchando al ESI	*/
 	
-	/*	Falta hacer todos los chequeos de errores para el log, la conexión con las instancias,
+	/*	Falta hacer todos los chequeos de errores para el log, la conexiï¿½n con las instancias,
 	 *	y todo el manejo de la informacion que manda el ESI
 	 */
 	

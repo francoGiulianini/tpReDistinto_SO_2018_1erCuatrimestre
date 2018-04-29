@@ -15,6 +15,9 @@ pthread_t idHostConnections;
 struct sockaddr_in serverAddress;
 t_config* config;
 int listeningPort;
+int socket_c;
+char* ip_c;
+int port_c;
 
 int main(void)
 {
@@ -24,35 +27,24 @@ int main(void)
     if(config == NULL)
         exit_with_error(logger, "Cannot open config file");
 
-    if(config_has_property(config, "PuertoEscucha"))
-        {
-            listeningPort = config_get_int_value(config, "PuertoEscucha");
-            log_info(logger, "Port from config file: %d", listeningPort);
-        }
-    else
-        exit_with_error(logger, "Cannot read port from config file");
-
-	serverAddress.sin_family = AF_INET;
-	serverAddress.sin_addr.s_addr = INADDR_ANY;
-	serverAddress.sin_port = htons(listeningPort);
+    get_values_from_config(logger, config);
+	
+    //aqui se conecta con el coordinador
+    socket_c = connect_to_server(ip_c, port_c, "Coordinator");
 
 	int error = pthread_create(&idConsole, NULL, Console, NULL);
-
 	if(error != 0)
 	{
-		//Logear que no se creo el hilo
 		log_error(logger, "Couldn't create Console");
 	}
 
-	//aca se tendria que conectar con los demas modulos
-	error = pthread_create(&idHostConnections, NULL, HostConnections, NULL);
-
+	//aca se conecta con los esis
+	error = pthread_create(&idHostConnections, NULL, HostConnections, NULL); 
 	if(error != 0)
 	{
-		//Logear que no se creo el hilo
 		log_error(logger, "Couldn't create Server Thread");
 	}
-	
+
 	//Codigo del Planificador
 	while (stop != 1)
 	{
@@ -70,6 +62,41 @@ void exit_with_error(t_log* logger, char* error_message)
     exit(EXIT_FAILURE);
 }
 
+void get_values_from_config(t_log* logger, t_config* config)
+{
+    get_int_value(logger, "PuertoEscucha", &listeningPort, config);
+    get_int_value(logger, "PuertoCoordinador", &port_c, config);
+    get_string_value(logger, "IPCoordinador", &ip_c, config);
+}
+
+void get_int_value(t_log* logger, char* key, int *value, t_config* config)
+{
+    if(config_has_property(config, key))
+    {
+        *value = config_get_int_value(config, key);
+        log_info(logger, "%s from config file: %d", key, *value);
+    }
+    else
+    {
+        log_error(logger, "Config does not contain %s", key);
+        exit_with_error(logger, "");
+    }
+}
+
+void get_string_value(t_log* logger, char* key, char* *value, t_config* config)
+{
+    if(config_has_property(config, key))
+    {
+        *value = config_get_string_value(config, key);
+        log_info(logger, "%s from config file: %s", key, *value);
+    }
+    else
+    {
+        log_error(logger, "Config does not contain %s", key);
+        exit_with_error(logger, "");
+    }
+}
+
 void configure_logger()
 {
   logger = log_create("Planificador.log", "Planificador", true, LOG_LEVEL_INFO);
@@ -80,17 +107,22 @@ void *HostConnections(void * parameter)
 	char * message = "Welcome";
 	int opt = 1;
 	int master_socket, new_socket , client_socket[30] , 
-          max_clients = 30 , activity, i , valread , sd;  
+        max_clients = 30 , activity, i , valread , sd;  
     int max_sd;  
 	int addrlen = sizeof(serverAddress);
 	char * buffer;
 	fd_set read_fds;
+
+	serverAddress.sin_family = AF_INET;
+	serverAddress.sin_addr.s_addr = INADDR_ANY;
+	serverAddress.sin_port = htons(listeningPort);
 
 	for (i = 0; i < max_clients; i++)  
     {  
         client_socket[i] = 0;  
     }
 
+    //Socket for listening
 	master_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if (master_socket < 0)
 		exit_with_error(logger, "Failed to create Socket");
@@ -186,7 +218,7 @@ void *HostConnections(void * parameter)
                     getpeername(sd , (struct sockaddr*)&serverAddress , \
                         (socklen_t*)&addrlen);  
                     log_info(logger, "Host disconnected , ip %s , port %d", 
-                          inet_ntoa(serverAddress.sin_addr) , ntohs(serverAddress.sin_port));  
+                        inet_ntoa(serverAddress.sin_addr) , ntohs(serverAddress.sin_port));  
                        
                     //Close the socket and mark as 0 in list for reuse 
                     close( sd );  
@@ -204,4 +236,49 @@ void *HostConnections(void * parameter)
             }  
         }
 	}
+}
+
+int connect_to_server(char * ip, int port_int, char *server)
+{
+	struct addrinfo hints;
+  	struct addrinfo *server_info;
+
+  	memset(&hints, 0, sizeof(hints));
+  	hints.ai_family = AF_UNSPEC; 
+  	hints.ai_socktype = SOCK_STREAM; 
+
+    char * port = calloc(sizeof(char), sizeof(port_int) + 1);
+    sprintf(port, "%d", port_int);
+
+  	getaddrinfo("127.0.0.1", port, &hints, &server_info);
+    free(port);
+
+  	int server_socket = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
+    if (server_socket <= 0)
+    {
+        perror("client: socket");
+        exit_with_error(logger, "Failed to create Socket");
+    }
+  	int res = connect(server_socket, server_info->ai_addr, server_info->ai_addrlen);
+
+  	freeaddrinfo(server_info);
+
+  	if (res < 0) 
+  	{
+   		log_error(logger, "Cannot connect to: %s", server);
+		exit_with_error(logger, "");
+  	}
+  
+  	log_info(logger, "Connected with the: %s", server);
+
+	char * buffer = (char*) calloc(sizeof(char), WELCOME_MSG);
+
+	recv(server_socket, buffer, WELCOME_MSG, 0);
+
+	log_info(logger, "%s", buffer);
+	free(buffer);
+
+    //enviar mensaje al coordinador diciendole que es el planificador
+
+	return server_socket;
 }
