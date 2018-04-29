@@ -9,6 +9,7 @@
  */
 #include "Planificador.h"
 #include "Consola.h"
+//#include <ConfigGetValues.h>
 
 pthread_t idConsole;
 pthread_t idHostConnections;
@@ -17,7 +18,7 @@ t_config* config;
 int listeningPort;
 int socket_c;
 char* ip_c;
-int port_c;
+char* port_c;
 
 int main(void)
 {
@@ -31,7 +32,7 @@ int main(void)
 	
     //aqui se conecta con el coordinador
     socket_c = connect_to_server(ip_c, port_c, "Coordinator");
-    //send_hello(socket_c);
+    send_hello(socket_c);
 
 	int error = pthread_create(&idConsole, NULL, Console, NULL);
 	if(error != 0)
@@ -66,7 +67,7 @@ void exit_with_error(t_log* logger, char* error_message)
 void get_values_from_config(t_log* logger, t_config* config)
 {
     get_int_value(logger, "PuertoEscucha", &listeningPort, config);
-    get_int_value(logger, "PuertoCoordinador", &port_c, config);
+    get_string_value(logger, "PuertoCoordinador", &port_c, config);
     get_string_value(logger, "IPCoordinador", &ip_c, config);
 }
 
@@ -241,7 +242,7 @@ void *HostConnections(void * parameter)
 	}
 }
 
-int connect_to_server(char * ip, int port_int, char *server)
+int connect_to_server(char * ip, char * port, char *server)
 {
 	struct addrinfo hints;
   	struct addrinfo *server_info;
@@ -250,11 +251,7 @@ int connect_to_server(char * ip, int port_int, char *server)
   	hints.ai_family = AF_UNSPEC; 
   	hints.ai_socktype = SOCK_STREAM; 
 
-    char * port = calloc(sizeof(char), sizeof(port_int) + 1);
-    sprintf(port, "%d", port_int);
-
-  	getaddrinfo("127.0.0.1", port, &hints, &server_info);
-    free(port);
+  	getaddrinfo(ip, port, &hints, &server_info);
 
   	int server_socket = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
     if (server_socket <= 0)
@@ -287,10 +284,9 @@ int connect_to_server(char * ip, int port_int, char *server)
 void  send_hello(int socket) 
 {
     char * header = "30";
+    int header_len = strlen(header) + 1;
 
-	int result = send(socket, &header, sizeof(header), 0);
+	int result = send(socket, header, header_len, 0);
 	if (result <= 0)
 		exit_with_error(logger, "Cannot send Hello");
-
-	free(header);
 }
