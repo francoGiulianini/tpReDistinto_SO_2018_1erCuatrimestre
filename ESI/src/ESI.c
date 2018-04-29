@@ -10,18 +10,21 @@
 
 #include "ESI.h"
 
-t_log * logger;
-#define IP_S "127.0.0.1"
-#define PORT_S "8080"
-#define IP_C "127.0.0.1"
-#define PORT_C "8081"
+char* ip_s;
+char* port_s;
+char* ip_c;
+char* port_c;
 
 int main(void) 
 {
 	configure_logger();
-	int scheduler_socket = connect_to_server(IP_S, PORT_S, "Scheduler");
+	config = config_create("Config.cfg");
+    if(config == NULL)
+        exit_with_error(logger, "Cannot open config file");
+    get_values_from_config(logger, config);
+	int scheduler_socket = connect_to_server(ip_s, port_s, "Scheduler");
 	send_hello(scheduler_socket);
-	int coordinator_socket = connect_to_server(IP_C, PORT_C, "Coordinator");
+	int coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
 	send_hello(coordinator_socket);	
 	while(1);
 	return EXIT_SUCCESS;
@@ -30,6 +33,49 @@ int main(void)
 void configure_logger()
 {
   logger = log_create("ESI.log", "ESI", true, LOG_LEVEL_INFO);
+}
+
+void exit_with_error(t_log* logger, char* error_message)
+{
+    log_error(logger, error_message);
+    log_destroy(logger);
+    exit(EXIT_FAILURE);
+}
+
+void get_values_from_config(t_log* logger, t_config* config)
+{
+    get_string_value(logger, "PuertoPlanificador", &port_s, config);
+	get_string_value(logger, "IPPlanificador", &ip_s, config);
+    get_string_value(logger, "PuertoCoordinador", &port_c, config);
+    get_string_value(logger, "IPCoordinador", &ip_c, config);
+}
+
+void get_int_value(t_log* logger, char* key, int *value, t_config* config)
+{
+    if(config_has_property(config, key))
+    {
+        *value = config_get_int_value(config, key);
+        log_info(logger, "%s from config file: %d", key, *value);
+    }
+    else
+    {
+        log_error(logger, "Config does not contain %s", key);
+        exit_with_error(logger, "");
+    }
+}
+
+void get_string_value(t_log* logger, char* key, char* *value, t_config* config)
+{
+    if(config_has_property(config, key))
+    {
+        *value = config_get_string_value(config, key);
+        log_info(logger, "%s from config file: %s", key, *value);
+    }
+    else
+    {
+        log_error(logger, "Config does not contain %s", key);
+        exit_with_error(logger, "");
+    }
 }
 
 int connect_to_server(char * ip, char * port, char *server)
@@ -69,11 +115,14 @@ int connect_to_server(char * ip, char * port, char *server)
 
 void  send_hello(int socket) 
 {
-	char * header = "20";
+	content_header * header_c = (content_header*) malloc(sizeof(content_header));
 
-	int result = send(socket, header, 3, 0);
+    header_c->id=20;
+    header_c->len=0;
+
+	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
 		log_error(logger, "cannot send hello");
 		//exit_with_error(logger, "Cannot send Hello");
-	free(header);
+	free(header_c);
 }

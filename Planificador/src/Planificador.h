@@ -22,8 +22,15 @@
 
 #define WELCOME_MSG 8
 
+typedef struct
+{
+    int id;
+    int len;
+} __attribute__((packed)) content_header;
+
 int stop; //variables globales
 t_log * logger;
+t_config* config;
 
 void exit_with_error(t_log* logger, char* error_message);
 void configure_logger();

@@ -48,28 +48,32 @@ int main(void) {
 	
 	send(socketESI, "WELCOME", 8, 0);
 
-	char * header = malloc(3);
-	int recv_result = recv(socketESI, header, 3, 0);
+	/*char * header = malloc(3);*/
+	content_header * header_c = (content_header *) malloc(sizeof(content_header));
+
+	int recv_result = recv(socketESI, header_c, sizeof(content_header), 0);
 	if(recv_result <= 0)
 	{
 		perror("recv");
 		exit_with_error(logger, "Cannot receive message");
 	}
-	if(strcmp(header, "10") == 0)
+	if(header_c->id == 10)
 	{
 		log_info(logger,"Connected with an Instance");
 		//agregar a vector de instancias
 	}
-	if(strcmp(header, "20") == 0)
+	if(header_c->id == 20)
 	{
 		log_info(logger,"Connected with an ESI");
 		//agregar a vector de esis
 	}
-	if(strcmp(header, "30") == 0)
+	if(header_c->id == 30)
 	{
 		log_info(logger,"Connected with the Scheduler");
 		//agregar a una variable
 	}
+
+	free(header_c);
 	/*	Falta hacer todos los chequeos de errores para el log, la conexi�n con las instancias,
 	 *	y todo el manejo de la informacion que manda el ESI
 	 */

@@ -14,7 +14,6 @@
 pthread_t idConsole;
 pthread_t idHostConnections;
 struct sockaddr_in serverAddress;
-t_config* config;
 int listeningPort;
 int socket_c;
 char* ip_c;
@@ -283,10 +282,24 @@ int connect_to_server(char * ip, char * port, char *server)
 
 void  send_hello(int socket) 
 {
-    char * header = "30";
-    int header_len = strlen(header) + 1;
+    content_header * header_c = (content_header*) malloc(sizeof(content_header));
 
-	int result = send(socket, header, header_len, 0);
+    header_c->id=30;
+    header_c->len=0;
+
+	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
 		exit_with_error(logger, "Cannot send Hello");
+    free(header_c);
 }
+
+/*void serialize_header(content_header * header, char** message)
+{
+	int offset=0;
+
+	memcpy(*message, &(header->id), sizeof(header->id));
+
+	offset = sizeof(header->id); 
+
+	memcpy(*message + offset, &(header->len), sizeof(header->len));
+}*/

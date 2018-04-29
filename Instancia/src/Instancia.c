@@ -10,14 +10,18 @@
 
 #include "Instancia.h"
 
-t_log * logger;
-#define IP_C "127.0.0.1"
-#define PORT_C "8081"
+char* port_c;
+char* ip_c;
+char* name;
 
 int main(void) 
 {
 	configure_logger();
-	int coordinator_socket = connect_to_server(IP_C, PORT_C, "Coordinator");
+	config = config_create("Config.cfg");
+    if(config == NULL)
+        exit_with_error(logger, "Cannot open config file");
+    get_values_from_config(logger, config);
+	int coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
 	send_hello(coordinator_socket);
 	while(1);
 	return EXIT_SUCCESS;
@@ -26,6 +30,48 @@ int main(void)
 void configure_logger()
 {
   logger = log_create("Instancia.log", "Instancia", true, LOG_LEVEL_INFO);
+}
+
+void exit_with_error(t_log* logger, char* error_message)
+{
+    log_error(logger, error_message);
+    log_destroy(logger);
+    exit(EXIT_FAILURE);
+}
+
+void get_values_from_config(t_log* logger, t_config* config)
+{
+    get_string_value(logger, "PuertoCoordinador", &port_c, config);
+    get_string_value(logger, "IPCoordinador", &ip_c, config);
+	get_string_value(logger, "NombreInstancia", &name, config);
+}
+
+void get_int_value(t_log* logger, char* key, int *value, t_config* config)
+{
+    if(config_has_property(config, key))
+    {
+        *value = config_get_int_value(config, key);
+        log_info(logger, "%s from config file: %d", key, *value);
+    }
+    else
+    {
+        log_error(logger, "Config does not contain %s", key);
+        exit_with_error(logger, "");
+    }
+}
+
+void get_string_value(t_log* logger, char* key, char* *value, t_config* config)
+{
+    if(config_has_property(config, key))
+    {
+        *value = config_get_string_value(config, key);
+        log_info(logger, "%s from config file: %s", key, *value);
+    }
+    else
+    {
+        log_error(logger, "Config does not contain %s", key);
+        exit_with_error(logger, "");
+    }
 }
 
 int connect_to_server(char * ip, char * port, char *server)
@@ -65,11 +111,12 @@ int connect_to_server(char * ip, char * port, char *server)
 
 void  send_hello(int socket) 
 {
-	char * header = "10";
+	content_header * header_c = (content_header *) malloc (sizeof(content_header));
+	
+	header_c->id=10;
+	header_c->len=strlen(name);
 
-	int result = send(socket, header, 3, 0);
+	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
 		exit_with_error(logger, "Cannot send Hello");
-
-	free(header);
 }

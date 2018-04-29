@@ -21,6 +21,12 @@
 struct addrinfo hints;
 struct addrinfo *serverInfo;
 
+typedef struct
+{
+    int id;
+    int len;
+} __attribute__((packed)) content_header;
+
 t_log * logger;
 int listeningSocket;
 
