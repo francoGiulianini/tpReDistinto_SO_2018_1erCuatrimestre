@@ -8,9 +8,6 @@
  ============================================================================
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "Instancia.h"
 
 t_log * logger;
@@ -21,6 +18,7 @@ int main(void)
 {
 	configure_logger();
 	int coordinator_socket = connect_to_server(IP_C, PORT_C, "Coordinator");
+	send_hello(coordinator_socket);
 	while(1);
 	return EXIT_SUCCESS;
 }
@@ -63,4 +61,15 @@ int connect_to_server(char * ip, char * port, char *server)
 	free(buffer);
 
 	return server_socket;
+}
+
+void  send_hello(int socket) 
+{
+	char * header = "10";
+
+	int result = send(socket, header, 3, 0);
+	if (result <= 0)
+		exit_with_error(logger, "Cannot send Hello");
+
+	free(header);
 }

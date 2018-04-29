@@ -35,7 +35,7 @@ int main(void) {
 	hints.ai_flags = AI_PASSIVE;
 	hints.ai_socktype = SOCK_STREAM;
 	
-	getaddrinfo(NULL, listeningPort, &hints, &serverInfo);
+	getaddrinfo(NULL, "8081"/*listeningPort*/, &hints, &serverInfo);
 	listeningSocket = socket(serverInfo->ai_family, serverInfo->ai_socktype, serverInfo->ai_protocol);
 	bind(listeningSocket,serverInfo->ai_addr, serverInfo->ai_addrlen);
 	freeaddrinfo(serverInfo);
@@ -46,6 +46,30 @@ int main(void) {
 
 	int socketESI = accept(listeningSocket, (struct sockaddr *) &addr, &addrlen);					/*	Hasta aca estar�a escuchando al ESI	*/
 	
+	send(socketESI, "WELCOME", 8, 0);
+
+	char * header = malloc(3);
+	int recv_result = recv(socketESI, header, 3, 0);
+	if(recv_result <= 0)
+	{
+		perror("recv");
+		exit_with_error(logger, "Cannot receive message");
+	}
+	if(strcmp(header, "10") == 0)
+	{
+		log_info(logger,"Connected with an Instance");
+		//agregar a vector de instancias
+	}
+	if(strcmp(header, "20") == 0)
+	{
+		log_info(logger,"Connected with an ESI");
+		//agregar a vector de esis
+	}
+	if(strcmp(header, "30") == 0)
+	{
+		log_info(logger,"Connected with the Scheduler");
+		//agregar a una variable
+	}
 	/*	Falta hacer todos los chequeos de errores para el log, la conexi�n con las instancias,
 	 *	y todo el manejo de la informacion que manda el ESI
 	 */

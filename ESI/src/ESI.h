@@ -13,5 +13,6 @@
 
 void configure_logger();
 int connect_to_server(char * ip, char * port, char * server);
+void send_hello(int socket);
 
 #endif

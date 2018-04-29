@@ -13,12 +13,16 @@
 t_log * logger;
 #define IP_S "127.0.0.1"
 #define PORT_S "8080"
+#define IP_C "127.0.0.1"
+#define PORT_C "8081"
 
 int main(void) 
 {
 	configure_logger();
-	int scheduler_socket = connect_to_server(IP_S, PORT_S, "Scheduler");	
-	//ahora conectar con coordinador (no es el mismo puerto)
+	int scheduler_socket = connect_to_server(IP_S, PORT_S, "Scheduler");
+	send_hello(scheduler_socket);
+	int coordinator_socket = connect_to_server(IP_C, PORT_C, "Coordinator");
+	send_hello(coordinator_socket);	
 	while(1);
 	return EXIT_SUCCESS;
 }
@@ -61,4 +65,15 @@ int connect_to_server(char * ip, char * port, char *server)
 	free(buffer);
 
 	return server_socket;
+}
+
+void  send_hello(int socket) 
+{
+	char * header = "20";
+
+	int result = send(socket, header, 3, 0);
+	if (result <= 0)
+		log_error(logger, "cannot send hello");
+		//exit_with_error(logger, "Cannot send Hello");
+	free(header);
 }

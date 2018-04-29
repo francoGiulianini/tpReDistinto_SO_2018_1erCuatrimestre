@@ -25,6 +25,7 @@
 int stop; //variables globales
 t_log * logger;
 
+
 void exit_with_error(t_log* logger, char* error_message);
 void configure_logger();
 void get_values_from_config(t_log* logger, t_config* config);
@@ -32,5 +33,6 @@ void get_int_value(t_log* logger, char* key, int *value, t_config* config);
 void get_string_value(t_log* logger, char* key, char* *value, t_config* config);
 void *HostConnections(void * parameter);
 int connect_to_server(char * ip, int port_int, char *server); //hacer una shared library
+void send_hello(int socket);
 
 #endif /* PLANIFICADOR_H_ */

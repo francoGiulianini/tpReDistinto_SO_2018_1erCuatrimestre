@@ -20,6 +20,7 @@
 
 struct addrinfo hints;
 struct addrinfo *serverInfo;
+
 t_log * logger;
 int listeningSocket;
 

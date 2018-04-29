@@ -31,6 +31,7 @@ int main(void)
 	
     //aqui se conecta con el coordinador
     socket_c = connect_to_server(ip_c, port_c, "Coordinator");
+    //send_hello(socket_c);
 
 	int error = pthread_create(&idConsole, NULL, Console, NULL);
 	if(error != 0)
@@ -210,9 +211,11 @@ void *HostConnections(void * parameter)
                
             if (FD_ISSET( sd , &read_fds))  
             {  
+                //content_header * header = (content_header*) malloc(sizeof(content_header));
+                char* header = malloc(3);
                 //Check if it was for closing , and also read the 
                 //incoming message 
-                if ((valread = read( sd , buffer, 1024)) == 0)  //TIENE QUE SEGUIR EL PROTOCOLO
+                if ((valread = recv(sd ,header, 3, 0)) == 0)  //TIENE QUE SEGUIR EL PROTOCOLO
                 {  
                     //Somebody disconnected , get his details and print 
                     getpeername(sd , (struct sockaddr*)&serverAddress , \
@@ -230,8 +233,8 @@ void *HostConnections(void * parameter)
                 {  
                     //set the string terminating NULL byte on the end 
                     //of the data read 
-                    buffer[valread] = '\0';  
-                    send(sd , buffer , strlen(buffer) , 0 );  
+                    /*buffer[valread] = '\0';  
+                    send(sd , buffer , strlen(buffer) , 0 );  */
                 }  
             }  
         }
@@ -278,7 +281,16 @@ int connect_to_server(char * ip, int port_int, char *server)
 	log_info(logger, "%s", buffer);
 	free(buffer);
 
-    //enviar mensaje al coordinador diciendole que es el planificador
-
 	return server_socket;
+}
+
+void  send_hello(int socket) 
+{
+    char * header = "30";
+
+	int result = send(socket, &header, sizeof(header), 0);
+	if (result <= 0)
+		exit_with_error(logger, "Cannot send Hello");
+
+	free(header);
 }
