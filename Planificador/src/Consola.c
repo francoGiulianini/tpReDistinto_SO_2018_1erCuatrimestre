@@ -1,7 +1,7 @@
 #include "Planificador.h"
 #include "Consola.h"
 
-void *Console(void *parameter)
+void Console(/*void *parameter*/)
 {
 	int exit = 0; //flag de hilo consola
     int consoleInputIndex = 0;
@@ -33,12 +33,14 @@ void *Console(void *parameter)
 			case PAUSE:
 			{
 				//el panificador se pone en pausa
+				pthread_mutex_lock(&pause_mutex);
 				log_info(logger, "The Scheduler was paused by command");
 				break;
 			}
 			case RESUME:
 			{
 				//el panificador vuelve de la pausa
+				pthread_mutex_unlock(&pause_mutex);
 				log_info(logger, "The Scheduler was unpaused by command");
 				break;
 			}
@@ -56,6 +58,10 @@ void *Console(void *parameter)
 			{
 				//desbloquear clave
 				key = consoleReadArg(line, &consoleInputIndex);
+				if(null_argument(key, "<key>"))
+					{
+						break;
+					}
 				log_info(logger, "The Scheduler unlocked the key: %s by command", key);
 				free(key);
 				break;
@@ -93,7 +99,8 @@ void *Console(void *parameter)
 			case HELP:
 			{
 				//lista de todos los commandos
-				printf("exit\npause\nresume\nblock\nunlock\nlist\nkill\nstatus\ndeadlock\n");
+				printf("exit\npause\nresume\nblock <id> <key>\nunlock <key>\n"
+				"list <resource>\nkill <id>\nstatus <key>\ndeadlock\n");
 				break;
 			}
 			case ERROR:
@@ -154,4 +161,14 @@ _Commands to_enum(char * source)
 	if (string_equals_ignore_case(source, "HELP"))
 		return HELP;					
 	return ERROR;
+}
+
+int null_argument(char* arg_console, char* for_logger)
+{
+	if(strcmp(arg_console,"") == 0)
+	{
+		log_warning(logger, "Missing argument: %s", for_logger);
+		return 1;
+	}
+	return 0;
 }

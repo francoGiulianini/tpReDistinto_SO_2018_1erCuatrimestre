@@ -22,6 +22,8 @@ char* port_c;
 int main(void)
 {
 	configure_logger();
+    pthread_mutex_init(&pause_mutex, NULL);
+    cola_ready = queue_create();
 
     config = config_create("Config.cfg");
     if(config == NULL)
@@ -33,7 +35,7 @@ int main(void)
     socket_c = connect_to_server(ip_c, port_c, "Coordinator");
     send_hello(socket_c);
 
-	int error = pthread_create(&idConsole, NULL, Console, NULL);
+	int error = pthread_create(&idConsole, NULL, (void*)Console, NULL);
 	if(error != 0)
 	{
 		log_error(logger, "Couldn't create Console");
@@ -49,9 +51,13 @@ int main(void)
 	//Codigo del Planificador
 	while (stop != 1)
 	{
-		
+		pthread_mutex_lock(&pause_mutex);
+        //printf("hello"); use at your own risk :-)
+        pthread_mutex_unlock(&pause_mutex);
 	}
 
+    pthread_join(idConsole, NULL);
+    pthread_mutex_destroy(&pause_mutex);
     log_destroy(logger);
 	return EXIT_SUCCESS;
 }
@@ -106,9 +112,10 @@ void configure_logger()
 void *HostConnections(void * parameter)
 {
 	char * message = "Welcome";
+    int num_esi = 0;
 	int opt = 1;
-	int master_socket, new_socket , client_socket[30] , 
-        max_clients = 30 , activity, i , valread , sd;  
+	int master_socket, new_socket , client_socket[MAX_CLIENTS] , 
+        max_clients = MAX_CLIENTS , activity, i , valread , sd;  
     int max_sd;  
 	int addrlen = sizeof(serverAddress);
 	char * buffer;
@@ -179,7 +186,7 @@ void *HostConnections(void * parameter)
            
             //inform user of socket number - used in send and receive commands 
             log_info(logger,
-				"New connection , socket fd is %d , ip is : %s , port : %d \n", 
+				"New connection , socket fd is %d , ip is : %s , port : %d", 
 				new_socket , inet_ntoa(serverAddress.sin_addr) , ntohs(serverAddress.sin_port));  
          
             //send new connection greeting message 
@@ -197,8 +204,8 @@ void *HostConnections(void * parameter)
                 if( client_socket[i] == 0 )  
                 {  
                     client_socket[i] = new_socket;  
-                    log_info(logger, "Adding to list of sockets as %d\n" , i);  
-                       
+                    log_info(logger, "Adding to list of sockets as %d" , i);  
+                    
                     break;  
                 }  
             }  
@@ -211,11 +218,11 @@ void *HostConnections(void * parameter)
                
             if (FD_ISSET( sd , &read_fds))  
             {  
-                //content_header * header = (content_header*) malloc(sizeof(content_header));
-                char* header = malloc(3);
+                content_header * header = (content_header*) malloc(sizeof(content_header));
+
                 //Check if it was for closing , and also read the 
                 //incoming message 
-                if ((valread = recv(sd ,header, 3, 0)) == 0)  //TIENE QUE SEGUIR EL PROTOCOLO
+                if ((valread = recv(sd ,header, sizeof(content_header), 0)) == 0)  //TIENE QUE SEGUIR EL PROTOCOLO
                 {  
                     //Somebody disconnected , get his details and print 
                     getpeername(sd , (struct sockaddr*)&serverAddress , \
@@ -228,9 +235,40 @@ void *HostConnections(void * parameter)
                     client_socket[i] = 0;  
                 }  
                    
-                //Echo back the message that came in 
+                //check the message that came in 
                 else 
                 {  
+                    //nuevo esi
+                    if(header->id == 20)
+                    {
+                        //creamos la estructura del esi
+                        t_esi * new_esi = malloc(sizeof(t_esi));
+                        num_esi++;
+
+                        char* name = (char*)malloc(7);
+                        if(num_esi < 10)
+                            sprintf(name, "ESI0%d", num_esi);
+                        else 
+                            sprintf(name, "ESI%d", num_esi);
+
+                        new_esi->socket = sd;
+                        new_esi->name = name;
+                        //memcpy(new_esi.name, name, strlen(name) + 1);  
+                    
+                        //se agrega a la cola de ready
+                        queue_push(cola_ready, new_esi);
+                        log_info(logger, "New ESI added to the queue as %s", new_esi->name);
+                        
+                        //free(name);
+                        //free(new_esi->name);
+                        //free(new_esi);
+                    }
+                    
+                    //DEBUG ONLY
+                    
+                    t_esi * test_esi = queue_pop(cola_ready);
+                    log_warning(logger, "DEBUG: ESI name: %s in socket: %d", test_esi->name, test_esi->socket);
+                    
                     //set the string terminating NULL byte on the end 
                     //of the data read 
                     /*buffer[valread] = '\0';  

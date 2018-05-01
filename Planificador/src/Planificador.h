@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <commons/log.h>
 #include <commons/config.h>
+#include <commons/collections/queue.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -21,6 +22,7 @@
 #include <errno.h>
 
 #define WELCOME_MSG 8
+#define MAX_CLIENTS 2
 
 typedef struct
 {
@@ -28,9 +30,17 @@ typedef struct
     int len;
 } __attribute__((packed)) content_header;
 
+typedef struct
+{
+    int socket;
+    char* name;
+} t_esi;
+
 int stop; //variables globales
 t_log * logger;
-t_config* config;
+t_config * config;
+t_queue * cola_ready; //para no marear lo pongo en español
+pthread_mutex_t pause_mutex;
 
 void exit_with_error(t_log* logger, char* error_message);
 void configure_logger();

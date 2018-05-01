@@ -11,9 +11,11 @@
 typedef enum _Command {EXIT,PAUSE,RESUME,BLOCK,UNLOCK,LIST,KILL,STATUS,DEADLOCK,HELP,ERROR} _Commands;
 
 int stop;
+pthread_mutex_t pause_mutex;
 
-void *Console(void *parameter);
+void Console(/*void *parameter*/);
 char * consoleReadArg(char * source, int * i);
 _Commands to_enum(char * source);
+int null_argument(char* arg_console, char* for_logger);
 
 #endif /* CONSOLA_H_ */
