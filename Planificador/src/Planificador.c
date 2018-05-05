@@ -42,7 +42,7 @@ int main(void)
 	}
 
 	//aca se conecta con los esis
-	error = pthread_create(&idHostConnections, NULL, HostConnections, NULL); 
+	error = pthread_create(&idHostConnections, NULL, (void*)HostConnections, NULL); 
 	if(error != 0)
 	{
 		log_error(logger, "Couldn't create Server Thread");
@@ -109,7 +109,7 @@ void configure_logger()
   logger = log_create("Planificador.log", "Planificador", true, LOG_LEVEL_INFO);
 }
 
-void *HostConnections(void * parameter)
+void HostConnections(/*void * parameter*/)
 {
 	char * message = "Welcome";
     int num_esi = 0;

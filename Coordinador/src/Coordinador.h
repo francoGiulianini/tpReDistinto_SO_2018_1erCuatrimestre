@@ -17,6 +17,11 @@
 #include <unistd.h>
 #include <commons/log.h>
 #include <commons/config.h>
+#include <pthread.h>
+#include <errno.h>
+#include <arpa/inet.h>
+
+#define MAX_CLIENTS 10
 
 struct addrinfo hints;
 struct addrinfo *serverInfo;
@@ -29,8 +34,10 @@ typedef struct
 
 t_log * logger;
 int listeningSocket;
+struct sockaddr_in serverAddress;
 
 void configure_logger();
 void exit_with_error(t_log* logger, char* error_message);
+void HostConnections();
 
 #endif /* COORDINADOR_H_ */
