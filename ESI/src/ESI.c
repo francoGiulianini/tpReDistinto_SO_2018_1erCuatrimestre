@@ -10,14 +10,55 @@
 
 #include "ESI.h"
 
+#include <parsi/parser.h>
+
 char* ip_s;
 char* port_s;
 char* ip_c;
 char* port_c;
+FILE* script;
+ssize_t read;
+char * line = NULL;
+size_t len = 0;
 
-int main(void) 
+int main(int argc, char* argv[]) 
 {
 	configure_logger();
+	if(argc == 1) //
+	{ //HACER CON CASE(si es 1 faltan, si es 3 sobra)
+		log_error(logger, "Falta Script por argumento");
+		return EXIT_FAILURE;
+	}
+	script = fopen(argv[1], "r");
+
+	//ESTO ES UN EJEMPLO
+	while ((read = getline(&line, &len, script)) != -1) {
+        t_esi_operacion parsed = parse(line);
+
+        if(parsed.valido){
+            switch(parsed.keyword){
+                case GET:
+                    printf("GET\tclave: <%s>\n", parsed.argumentos.GET.clave);
+                    break;
+                case SET:
+                    printf("SET\tclave: <%s>\tvalor: <%s>\n", parsed.argumentos.SET.clave, parsed.argumentos.SET.valor);
+                    break;
+                case STORE:
+                    printf("STORE\tclave: <%s>\n", parsed.argumentos.STORE.clave);
+                    break;
+                default:
+                    fprintf(stderr, "No pude interpretar <%s>\n", line);
+                    exit(EXIT_FAILURE);
+            }
+            
+            destruir_operacion(parsed);
+        } else {
+            fprintf(stderr, "La linea <%s> no es valida\n", line);
+            exit(EXIT_FAILURE);
+        }
+    }
+	//FIN DEL EJEMPLO
+
 	config = config_create("Config.cfg");
     if(config == NULL)
         exit_with_error(logger, "Cannot open config file");
