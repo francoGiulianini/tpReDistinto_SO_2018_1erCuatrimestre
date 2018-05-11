@@ -20,6 +20,7 @@
 #include <commons/string.h>
 #include <commons/collections/list.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <errno.h>
 #include <arpa/inet.h>
 
@@ -40,12 +41,18 @@ typedef struct
 
 typedef struct
 {
+    char* key;
+    char* value;
+} __attribute__((packed)) message_content;
+
+typedef struct
+{
     char* name;
     int socket;
     int times_used; //para equitative load
     int space_used; //para least space used
     int is_active; //para saber si se cayo o no
-    pthread_mutex_t start;
+    sem_t start;
 } instance_t;
 
 typedef struct 
@@ -60,6 +67,7 @@ _Algorithm algorithm;
 struct sockaddr_in serverAddress;
 _Client hello_id;
 t_list * instances;
+message_content* message;
 //instance_t instances[MAX_INSTANCES];
 
 void configure_logger();
@@ -73,11 +81,11 @@ void host_scheduler(void* arg);
 void process_message_header(content_header* header, int socket);
 void assign_instance(_Algorithm algorithm, t_list* instances);
 void disconnect_socket(int socket, bool is_instance);
-void close_socket(int socket);
-void add_instance_to_list(char* name, int socket, instance_t* inst_aux);
+instance_t* add_instance_to_list(char* name, int socket);
 void disconnect_instance_in_list(int socket);
 instance_t* name_is_equal(t_list* lista, char* name);
 instance_t* socket_is_equal(t_list* lista, int socket);
+instance_t* find_by_times_used(t_list* lista);
 _Algorithm to_algorithm(char* string);
 
 #endif /* COORDINADOR_H_ */

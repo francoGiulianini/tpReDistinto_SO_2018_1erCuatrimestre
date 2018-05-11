@@ -14,10 +14,9 @@ t_config* config;
 pthread_mutex_t lock;
 int error;
 fd_set read_fds;
-int master_socket, new_socket , client_socket[MAX_CLIENTS] , 
-    max_clients = MAX_CLIENTS , i;
+int master_socket, new_socket;
 int addrlen = sizeof(serverAddress);
-char * message = "Welcome";
+char * welcome_message = "Welcome";
 content_header * header_c;
 
 int main(void) 
@@ -60,17 +59,10 @@ void get_config_values(t_config* config)
 }
 
 void create_server()
-{  
-	char * buffer;
-
+{
 	serverAddress.sin_family = AF_INET;
 	serverAddress.sin_addr.s_addr = INADDR_ANY;
 	serverAddress.sin_port = htons(listeningPort);
-
-	for (i = 0; i < max_clients; i++)  
-    {  
-        client_socket[i] = 0;  
-    }
 
     //Socket for listening
 	master_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -94,7 +86,6 @@ void host_connections()
     
     while(1)
 	{
-        //pthread_mutex_lock(&lock);
         FD_ZERO(&read_fds);
         FD_SET(master_socket, &read_fds);
 
@@ -106,24 +97,13 @@ void host_connections()
         log_info(logger, "New connection , socket fd is %d , ip is : %s , port : %d", 
 				new_socket , inet_ntoa(serverAddress.sin_addr) , ntohs(serverAddress.sin_port));   
 
-        pthread_mutex_lock(&lock);
-        for ( i = 0 ; i < max_clients ; i++)  
-        {  
-            if(!FD_ISSET(client_socket[i], &read_fds))
-            {
-                client_socket[i] = new_socket;
-                i = max_clients;
-            }
-        }
-        pthread_mutex_unlock(&lock);
-
         FD_SET(new_socket, &read_fds);
 
         pthread_t id_client;
         
-        if(send(new_socket, message, strlen(message), 0) <= 0)  
+        if(send(new_socket, welcome_message, strlen(welcome_message), 0) <= 0)  
         {  
-        perror("send"); 
+            perror("send"); 
         }  
         
         log_info(logger, "Welcome message sent successfully");
@@ -204,25 +184,25 @@ void host_instance(void* arg)
 
     instance_t * instance;
     instance = malloc(sizeof(instance_t));
-    instance->socket = socket;
-    instance->is_active = 1;
 
-    add_instance_to_list(name, socket, instance);
+    instance = add_instance_to_list(name, socket);
 
     char* header = malloc(sizeof(content_header));
 
     while(1)
     {
-        pthread_mutex_lock(&instance->start);
+        sem_wait(&instance->start);
 
-    //enviar header con tamaño de clave y valor
-    //enviar clave y valor
-        log_warning(logger, "DEBUG: i'm the chosen one");
-        //resultado de la operacion
+        //la instancia tiene que hacer algo previo?
         /*if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
             disconnect_socket(socket, true);*/
 
-        pthread_mutex_lock(&instance->start);
+        log_warning(logger, "DEBUG: i'm the chosen one");
+        //enviar header con tamaño de clave y valor
+        //send(socket, header_nuevo, sizeof(header_nuevo), 0);
+
+        //enviar clave y valor
+        //send(socket, message_content, len, 0);
     }
 
     free(header);
@@ -254,7 +234,7 @@ void host_scheduler(void* arg)
     int len = data->next_message_len;
 
     int valread;
-    char* header = malloc(sizeof(content_header));
+    content_header* header = malloc(sizeof(content_header));
 
     while(1)
     {
@@ -277,19 +257,9 @@ void disconnect_socket(int socket, bool is_instance)
         inet_ntoa(serverAddress.sin_addr) , ntohs(serverAddress.sin_port));  
         
     //Close the socket and mark as 0 in list for reuse 
-    close_socket(socket);
+    close(socket);
     pthread_mutex_unlock(&lock);
     pthread_exit(NULL);
-}
-
-void close_socket(int socket)
-{
-    close(socket); 
-    for(int j = 0; j < max_clients; j++)
-    {
-        if(client_socket[j] == socket)
-            client_socket[j] = 0;
-    }   
 }
 
 void process_message_header(content_header* header, int socket)
@@ -308,11 +278,25 @@ void process_message_header(content_header* header, int socket)
             //agregar a vector de esis
             break;
         }
+        case 21: //ESI pide un GET
+        {
+            log_info(logger, "ESI requested a GET");
+
+            //read(socket, message_content, header->len, 0);
+
+            //send(planificador, header_nuevo, sizeof(header_nuevo), 0);
+            //send(planificador, message, header->len, 0);
+            break;
+        }
         case 22: //ESI pide un SET
         {
             log_info(logger, "ESI requested a SET");
-            //posible semaforo
+
+            //read(socket, message, header->len, 0);
+
+            pthread_mutex_lock(&lock);
             assign_instance(algorithm, instances);
+            pthread_mutex_unlock(&lock);
             break;
         }
         case 30:
@@ -337,34 +321,38 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
         case EL:
         {
             instance_t* chosen_one = find_by_times_used(instances);
-            pthread_mutex_unlock(&chosen_one->start);
+            sem_post(&chosen_one->start);
             break;
         }
     }
 }
 
-void add_instance_to_list(char* name, int socket, instance_t* inst_aux)
+instance_t* add_instance_to_list(char* name, int socket)
 {
     log_info(logger, "Received Instance name: %s", name);
-
+    instance_t* inst_aux = (instance_t*)malloc(sizeof(instance_t));
     //agregar a diccionario de instancias
     inst_aux = name_is_equal(instances, name);
     if(inst_aux != NULL)
     { //si ya esta en la lista
-        pthread_mutex_lock(&inst_aux->start);
-        list_add(instances, inst_aux);
         log_info(logger, "Updated state of: %s", name);
     }
     else
     { //si no esta en la lista
+        inst_aux = (instance_t*)malloc(sizeof(instance_t)); 
         inst_aux->name = name;
         inst_aux->times_used = 0;
         inst_aux->space_used = 0;
-        pthread_mutex_init(&inst_aux->start, NULL);
-        pthread_mutex_lock(&inst_aux->start);
-        list_add(instances, inst_aux);
         log_info(logger, "New Instance added to list");
     }
+
+    inst_aux->socket = socket;
+    inst_aux->is_active = 1;
+    sem_init(&inst_aux->start, 0, 0);
+
+    list_add(instances, inst_aux);
+
+    return inst_aux;
 }
 
 void disconnect_instance_in_list(int socket)
@@ -373,7 +361,7 @@ void disconnect_instance_in_list(int socket)
     if(instance != NULL)
     {
         instance->is_active = 0;
-        pthread_mutex_unlock(&instance->start);
+        //pthread_mutex_unlock(&instance->start);
         list_add(instances, instance);
         log_info(logger, "Removed from list of active Instances");
     }
