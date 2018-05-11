@@ -8,6 +8,8 @@
 * Como compilar:
 
  -Planificador: gcc -o Planificador Planificador.c Consola.c -lreadline -lcommons -pthread
+ 
+ -Coordinador: gcc -o Coordinador Coordinador.c -lcommons -pthread
 
 ID headers:(se le envian)(ID+TamañoMensaje)
  * -Coordinador:
@@ -26,7 +28,9 @@ ID headers:(se le envian)(ID+TamañoMensaje)
 
   -30: hola soy el planificador
 
-  -31: 
+  -31: clave esta libre
+  
+  -32: clave no esta libre
 
 
  * -Planificador:
@@ -38,4 +42,8 @@ ID headers:(se le envian)(ID+TamañoMensaje)
   -22: ejecucion con exito
 
   -23: ejecucion bloqueo
+  
+  -31: coordinador pide chequear clave
+  
+  -32: coordinador pide desbloquear clave
  
