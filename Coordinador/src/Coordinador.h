@@ -24,9 +24,6 @@
 #include <errno.h>
 #include <arpa/inet.h>
 
-#define MAX_CLIENTS 10
-#define MAX_INSTANCES 5
-
 typedef enum _Clients {INSTANCE, ESI, SCHEDULER} _Client;
 typedef enum _Algorithms {EL, LRU, KE} _Algorithm;
 
@@ -64,11 +61,11 @@ typedef struct
 t_log * logger;
 int listeningPort;
 _Algorithm algorithm;
+int delay;
 struct sockaddr_in serverAddress;
 _Client hello_id;
 t_list * instances;
 message_content* message;
-//instance_t instances[MAX_INSTANCES];
 
 void configure_logger();
 void get_config_values(t_config* config);
@@ -80,12 +77,14 @@ void host_esi(void* arg);
 void host_scheduler(void* arg);
 void process_message_header(content_header* header, int socket);
 void assign_instance(_Algorithm algorithm, t_list* instances);
+int save_on_instance(t_list* instances);
 void disconnect_socket(int socket, bool is_instance);
 instance_t* add_instance_to_list(char* name, int socket);
 void disconnect_instance_in_list(int socket);
 instance_t* name_is_equal(t_list* lista, char* name);
 instance_t* socket_is_equal(t_list* lista, int socket);
 instance_t* find_by_times_used(t_list* lista);
+instance_t* find_by_key(t_list* lista, char* key);
 _Algorithm to_algorithm(char* string);
 
 #endif /* COORDINADOR_H_ */

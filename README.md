@@ -7,9 +7,8 @@
 
 * Como compilar:
 
- -Planificador: gcc -o Planificador Planificador.c Consola.c -lreadline -lcommons -pthread
- 
- -Coordinador: gcc -o Coordinador Coordinador.c -lcommons -pthread
+ -Planificador: (gcc -o Planificador Planificador.c Consola.c -lreadline -lcommons -pthread)
+ -Coordinador: (gcc -o Coordinador Coordinador.c -lcommons -pthread)
 
 ID headers:(se le envian)(ID+TamañoMensaje)
  * -Coordinador:
@@ -46,4 +45,6 @@ ID headers:(se le envian)(ID+TamañoMensaje)
   -31: coordinador pide chequear clave
   
   -32: coordinador pide desbloquear clave
+
+  -33: coordinador pide abortar esi
  

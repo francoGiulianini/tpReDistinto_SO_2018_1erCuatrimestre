@@ -13,6 +13,7 @@
 t_config* config;
 pthread_mutex_t lock;
 int error;
+int operation;
 fd_set read_fds;
 int master_socket, new_socket;
 int addrlen = sizeof(serverAddress);
@@ -56,6 +57,14 @@ void get_config_values(t_config* config)
         }
     else
         exit_with_error(logger, "Cannot read algorithm from config file");
+
+    if(config_has_property(config, "Retardo"))
+        {
+            delay = config_get_int_value(config, "Retardo");
+            log_info(logger, "Delay from config file: %d", delay);
+        }
+    else
+        exit_with_error(logger, "Cannot read Delay from config file");
 }
 
 void create_server()
@@ -232,17 +241,33 @@ void host_scheduler(void* arg)
     thread_data_t *data = (thread_data_t *) arg;
     int socket = data->socket;
     int len = data->next_message_len;
-
     int valread;
-    content_header* header = malloc(sizeof(content_header));
 
     while(1)
     {
-        if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
-            disconnect_socket(socket, false);
-    }
+        content_header* header = malloc(sizeof(content_header));
 
-    free(header);
+        switch(operation)
+        {
+            case 31: //preguntar por clave
+            {
+                break;
+            }
+            case 32: //desbloquear clave
+            {
+                break;
+            }
+            case 33: //abortar esi
+            {
+                break;
+            }
+        }
+
+        /*if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
+            disconnect_socket(socket, false);*/
+
+        free(header);
+    }
 }
 
 void disconnect_socket(int socket, bool is_instance)
@@ -282,7 +307,13 @@ void process_message_header(content_header* header, int socket)
         {
             log_info(logger, "ESI requested a GET");
 
+            operation = 31;
+            sleep(delay);
             //read(socket, message_content, header->len, 0);
+
+            pthread_mutex_lock(&lock);
+            assign_instance(algorithm, instances);
+            pthread_mutex_unlock(&lock);
 
             //send(planificador, header_nuevo, sizeof(header_nuevo), 0);
             //send(planificador, message, header->len, 0);
@@ -292,11 +323,20 @@ void process_message_header(content_header* header, int socket)
         {
             log_info(logger, "ESI requested a SET");
 
+            sleep(delay);
             //read(socket, message, header->len, 0);
 
             pthread_mutex_lock(&lock);
-            assign_instance(algorithm, instances);
+            int result = save_on_instance(instances);
             pthread_mutex_unlock(&lock);
+
+            if(!result)
+                operation = 33; 
+                //avisar a planificador para abortar esi
+                //supongo que tambien tengo que cerrar el hilo
+            //else
+                //avisar a esi del resultado
+
             break;
         }
         case 30:
@@ -316,14 +356,41 @@ void process_message_header(content_header* header, int socket)
 
 void assign_instance(_Algorithm algorithm, t_list* instances)
 {
+    //preguntar a planificador si la clave esta bloqueada
+    
+    instance_t* chosen_one;
+
+    chosen_one = find_by_key(instances, message->key);
+    
+    if (chosen_one != NULL)
+        return 1;
+
     switch(algorithm)
     {
         case EL:
         {
-            instance_t* chosen_one = find_by_times_used(instances);
-            sem_post(&chosen_one->start);
+            chosen_one = find_by_times_used(instances);
+        
+            //guardar clave en lista
+            
             break;
         }
+    }
+}
+
+int save_on_instance(t_list* instances)
+{
+    instance_t* chosen_one = find_by_key(instances, message->key);
+
+    if(chosen_one->is_active)
+    {
+        sem_post(&chosen_one->start);
+        return 1;
+    }
+    else
+    {
+        log_warning(logger, "Instance has key but is not active");
+        return 0;
     }
 }
 
@@ -410,7 +477,19 @@ instance_t* find_by_times_used(t_list* lista)
     list_aux = list_filter(lista, _is_active);
     list_sort(list_aux, _lower_than_the_next);
 
-    return list_take(lista, 1);
+    return list_get(lista, 1);
+}
+
+instance_t* find_by_key(t_list* lista, char* key)
+{
+    bool _is_the_one(instance_t* p) 
+    {
+        //revisar lista de claves
+        
+        return string_equals_ignore_case(p->name, key);
+    }
+
+    return list_find(instances, _is_the_one);
 }
 
 _Algorithm to_algorithm(char* string)
