@@ -1,5 +1,5 @@
-#ifndef PLANIFICADOR_H_
-#define PLANIFICADOR_H_
+#ifndef ESI_H_
+#define ESI_H_
 
 #include <stdio.h>
 #include <stdbool.h>
