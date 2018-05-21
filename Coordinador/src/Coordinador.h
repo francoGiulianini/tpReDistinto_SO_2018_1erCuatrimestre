@@ -66,6 +66,8 @@ struct sockaddr_in serverAddress;
 _Client hello_id;
 t_list * instances;
 message_content* message;
+sem_t esi_operation;
+sem_t scheduler_response;
 
 void configure_logger();
 void get_config_values(t_config* config);
@@ -76,6 +78,8 @@ void host_instance(void* arg);
 void host_esi(void* arg);
 void host_scheduler(void* arg);
 void process_message_header(content_header* header, int socket);
+void operation_get(content_header* header, int socket);
+void send_answer(int socket,int key_bool);
 void assign_instance(_Algorithm algorithm, t_list* instances);
 int save_on_instance(t_list* instances);
 void disconnect_socket(int socket, bool is_instance);

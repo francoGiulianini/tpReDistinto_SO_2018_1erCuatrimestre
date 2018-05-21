@@ -19,6 +19,7 @@ int master_socket, new_socket;
 int addrlen = sizeof(serverAddress);
 char * welcome_message = "Welcome";
 content_header * header_c;
+int key_is_not_blocked = 1;
 
 int main(void) 
 {
@@ -230,7 +231,10 @@ void host_esi(void* arg)
     {
         if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
             disconnect_socket(socket, false);
+        
         process_message_header(header, socket);
+
+
     }
 
     free(header);
@@ -238,6 +242,8 @@ void host_esi(void* arg)
 
 void host_scheduler(void* arg)
 {
+    sem_init(&esi_operation, 1, 0);
+    sem_init(&scheduler_response, 1, 0);
     thread_data_t *data = (thread_data_t *) arg;
     int socket = data->socket;
     int len = data->next_message_len;
@@ -246,11 +252,21 @@ void host_scheduler(void* arg)
     while(1)
     {
         content_header* header = malloc(sizeof(content_header));
+        int key_id;
 
+        sem_wait(&esi_operation);
+        header->len = strlen(message->key);
         switch(operation)
         {
             case 31: //preguntar por clave
             {
+                header->id = 31;
+                send(socket, header, sizeof(content_header*), 0);
+
+                recv(socket, key_id, sizeof(int), 0);
+
+                process_message_header(header, socket);
+                sem_post(&scheduler_response);
                 break;
             }
             case 32: //desbloquear clave
@@ -262,9 +278,6 @@ void host_scheduler(void* arg)
                 break;
             }
         }
-
-        /*if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
-            disconnect_socket(socket, false);*/
 
         free(header);
     }
@@ -305,18 +318,8 @@ void process_message_header(content_header* header, int socket)
         }
         case 21: //ESI pide un GET
         {
-            log_info(logger, "ESI requested a GET");
-
-            operation = 31;
-            sleep(delay);
-            //read(socket, message_content, header->len, 0);
-
-            pthread_mutex_lock(&lock);
-            assign_instance(algorithm, instances);
-            pthread_mutex_unlock(&lock);
-
-            //send(planificador, header_nuevo, sizeof(header_nuevo), 0);
-            //send(planificador, message, header->len, 0);
+            operation_get(message, socket);
+            
             break;
         }
         case 22: //ESI pide un SET
@@ -335,7 +338,6 @@ void process_message_header(content_header* header, int socket)
                 //avisar a planificador para abortar esi
                 //supongo que tambien tengo que cerrar el hilo
             //else
-                //avisar a esi del resultado
 
             break;
         }
@@ -346,6 +348,16 @@ void process_message_header(content_header* header, int socket)
             //agregar a una variable
             break;
         }
+        case 31:
+        {
+            log_info(logger,"And key is not blocked");
+            key_is_not_blocked = 1;
+        }
+        case 32:
+        {
+            log_info(logger,"But key is blocked");
+            key_is_not_blocked = 0;
+        }
         default:
         {
             log_error(logger, "Incorrect ID message");
@@ -354,16 +366,44 @@ void process_message_header(content_header* header, int socket)
     }
 }
 
+void operation_get(content_header* header, int socket)
+{
+    sleep(delay);
+    
+    recv(socket, message, header->len, 0);
+
+    log_info(logger, "ESI requested a GET of key: %s", message->key);
+    sem_post(&esi_operation);
+
+    sem_wait(&scheduler_response);
+    
+    pthread_mutex_lock(&lock);
+    assign_instance(algorithm, instances);          
+    pthread_mutex_unlock(&lock);
+    
+    send_answer(socket, key_is_not_blocked);  
+}
+
+void send_answer(int socket,int key_is_blocked)
+{
+    if(key_is_blocked)
+    {
+        send(socket, 22, sizeof(int), 0);
+    }
+    else
+    {
+        send(socket, 23, sizeof(int), 0);
+    }
+}
+
 void assign_instance(_Algorithm algorithm, t_list* instances)
 {
-    //preguntar a planificador si la clave esta bloqueada
-    
     instance_t* chosen_one;
 
     chosen_one = find_by_key(instances, message->key);
     
-    if (chosen_one != NULL)
-        return 1;
+    if (chosen_one != NULL) //si me devuelve un elemento es porque ya se pidio antes
+        return;
 
     switch(algorithm)
     {
