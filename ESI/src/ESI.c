@@ -12,68 +12,67 @@
 
 #include <parsi/parser.h>
 
-char* ip_s;
-char* port_s;
-char* ip_c;
-char* port_c;
-FILE* script;
+char * ip_s;
+char * port_s;
+char * ip_c;
+char * port_c;
+FILE * script;
 ssize_t read;
 char * line = NULL;
+t_esi_operacion parsed;
 size_t len = 0;
 
 int main(int argc, char* argv[]) 
 {
 	configure_logger();
-	if(argc == 1) //
-	{ //HACER CON CASE(si es 1 faltan, si es 3 sobra)
-		log_error(logger, "Falta Script por argumento");
-		return EXIT_FAILURE;
-	}
-	script = fopen(argv[1], "r");
 
-	//ESTO ES UN EJEMPLO
-	while ((read = getline(&line, &len, script)) != -1) {
-        t_esi_operacion parsed = parse(line);
+	check_arguments(argc);
 
-        if(parsed.valido){
-            switch(parsed.keyword){
-                case GET:
-                    printf("GET\tclave: <%s>\n", parsed.argumentos.GET.clave);
-                    break;
-                case SET:
-                    printf("SET\tclave: <%s>\tvalor: <%s>\n", parsed.argumentos.SET.clave, parsed.argumentos.SET.valor);
-                    break;
-                case STORE:
-                    printf("STORE\tclave: <%s>\n", parsed.argumentos.STORE.clave);
-                    break;
-                default:
-                    fprintf(stderr, "No pude interpretar <%s>\n", line);
-                    exit(EXIT_FAILURE);
-            }
-            
-            destruir_operacion(parsed);
-        } else {
-            fprintf(stderr, "La linea <%s> no es valida\n", line);
-            exit(EXIT_FAILURE);
-        }
-    }
-	//FIN DEL EJEMPLO
+	script = fopen(argv[1], "rb");
+	if(script == NULL)
+        exit_with_error(logger, "Cannot open script");
 
 	config = config_create("Config.cfg");
     if(config == NULL)
         exit_with_error(logger, "Cannot open config file");
+
     get_values_from_config(logger, config);
+
 	int scheduler_socket = connect_to_server(ip_s, port_s, "Scheduler");
+
 	send_hello(scheduler_socket);
+
 	int coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
-	send_hello(coordinator_socket);	
-	while(1);
+
+	send_hello(coordinator_socket);
+
+	while(1)
+	{
+		send_next_operation();
+	}
+
 	return EXIT_SUCCESS;
 }
 
 void configure_logger()
 {
   logger = log_create("ESI.log", "ESI", true, LOG_LEVEL_INFO);
+}
+
+void check_arguments(int argc)
+{
+	switch (argc)
+	{
+		case 1:
+			exit_with_error(logger, "Missing script argument");
+			break;
+
+		case 2:
+			break;
+
+		default:
+			exit_with_error(logger, "Too many arguments!");
+	}
 }
 
 void exit_with_error(t_log* logger, char* error_message)
@@ -163,7 +162,41 @@ void  send_hello(int socket)
 
 	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
-		log_error(logger, "cannot send hello");
-		//exit_with_error(logger, "Cannot send Hello");
+		log_error(logger, "cannot send hello");		//¿Por qué se usa este y no el de abajo?
+		//exit_with_error(logger, "Cannot send Hello");		<----	¿Por qué esta comentado esto?
 	free(header_c);
+}
+
+void send_next_operation()
+{
+	if ((read = getline(&line, &len, script)) != -1)
+		{
+		        t_esi_operacion parsed = parse(line);
+
+		        if(parsed.valido){
+		            switch(parsed.keyword){	//El comportamiento dentro de cada case deberia ser el de mandar al Coordinador lo parseado,
+		                case GET:			//chequear que no haya errores, y si el ESI esta bloqueado volver atras el puntero del script
+		                    printf("GET\tclave: <%s>\n", parsed.argumentos.GET.clave);
+		                    break;
+		                case SET:
+		                    printf("SET\tclave: <%s>\tvalor: <%s>\n", parsed.argumentos.SET.clave, parsed.argumentos.SET.valor);
+		                    break;
+		                case STORE:
+		                    printf("STORE\tclave: <%s>\n", parsed.argumentos.STORE.clave);
+		                    break;
+		                default:
+		                    exit_with_error(logger, "unable to interprete line from script");
+		            }
+
+		            destruir_operacion(parsed);
+		        } else {
+		        	exit_with_error(logger, "line from script is not valid");
+		        }
+
+		        if(feof(script)) exit(EXIT_SUCCESS);
+
+		} else {
+			exit_with_error("unable to read line from script");
+		}
+
 }

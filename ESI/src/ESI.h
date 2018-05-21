@@ -1,7 +1,8 @@
-#ifndef PLANIFICADOR_H_
-#define PLANIFICADOR_H_
+#ifndef ESI_H_
+#define ESI_H_
 
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -22,11 +23,13 @@ t_config* config;
 t_log * logger;
 
 void configure_logger();
+void check_arguments(int argc);
 void exit_with_error(t_log* logger, char* error_message);
 void get_values_from_config(t_log* logger, t_config* config);
 void get_int_value(t_log* logger, char* key, int *value, t_config* config);
 void get_string_value(t_log* logger, char* key, char* *value, t_config* config);
 int connect_to_server(char * ip, char * port, char * server);
 void send_hello(int socket);
+void send_next_operation();
 
 #endif
