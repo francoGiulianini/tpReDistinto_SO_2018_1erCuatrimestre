@@ -20,6 +20,7 @@
 #include <sys/select.h>
 #include <unistd.h>
 #include <errno.h>
+#include <semaphore.h>
 
 #define WELCOME_MSG 8
 #define MAX_CLIENTS 2
@@ -41,6 +42,7 @@ t_log * logger;
 t_config * config;
 t_queue * cola_ready; //para no marear lo pongo en español
 pthread_mutex_t pause_mutex;
+sem_t esi_listo;
 
 void exit_with_error(t_log* logger, char* error_message);
 void configure_logger();
@@ -50,5 +52,7 @@ void get_string_value(t_log* logger, char* key, char* *value, t_config* config);
 void HostConnections(/*void * parameter*/);
 int connect_to_server(char * ip, char * port, char *server); //hacer una shared library
 void send_hello(int socket);
+void send_message(int socket, int id);
+void wait_question(int socket);
 
 #endif /* PLANIFICADOR_H_ */

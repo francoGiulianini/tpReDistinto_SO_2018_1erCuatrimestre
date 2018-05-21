@@ -18,10 +18,16 @@ int listeningPort;
 int socket_c;
 char* ip_c;
 char* port_c;
+int fin_de_esi = 1;
+t_esi* un_esi;
+int clave_ok;
+char* clave;
+int respuesta_ok = 1;
 
 int main(void)
 {
 	configure_logger();
+    sem_init(&esi_listo, 1, 1);
     pthread_mutex_init(&pause_mutex, NULL);
     cola_ready = queue_create();
 
@@ -48,11 +54,33 @@ int main(void)
 		log_error(logger, "Couldn't create Server Thread");
 	}
 
+    //sem_wait(&coordinador_listo);
+
 	//Codigo del Planificador
 	while (stop != 1)
-	{
-		pthread_mutex_lock(&pause_mutex);
-        //printf("hello"); use at your own risk :-)
+	{    
+		sem_wait(&esi_listo);
+        pthread_mutex_lock(&pause_mutex);
+        
+        if(fin_de_esi)
+            un_esi = queue_pop(cola_ready);
+        
+        send_message(un_esi->socket, 21); //ejecutar una instruccion
+
+        wait_question(socket_c); //esperar pregunta del coordinador
+
+        clave_ok = chequear_clave(clave);
+
+        enviar_mensaje(socket_c, clave_ok); //31 clave libre 32 clave bloqueada
+
+        esperar_respuesta_esi(un_esi->socket); //modifica la variable respuesta_ok
+        
+        //sem_wait(&coordinador_respuesta);
+        if(!respuesta_ok)
+        {
+            bloquear_esi(un_esi);
+        }
+
         pthread_mutex_unlock(&pause_mutex);
 	}
 
@@ -263,16 +291,28 @@ void HostConnections(/*void * parameter*/)
                         //free(new_esi->name);
                         //free(new_esi);
                     }
+
+                    if(header->id == 22)
+                    {
+                        //ejecucion con exito
+                    }
                     
-                    //DEBUG ONLY
-                    
-                    t_esi * test_esi = queue_pop(cola_ready);
-                    log_warning(logger, "DEBUG: ESI name: %s in socket: %d", test_esi->name, test_esi->socket);
-                    
-                    //set the string terminating NULL byte on the end 
-                    //of the data read 
-                    /*buffer[valread] = '\0';  
-                    send(sd , buffer , strlen(buffer) , 0 );  */
+                    if(header->id == 23)
+                    {
+                        //ejecucion bloquear
+                    }
+
+                    if(header->id == 24) //esi tiene mas instrucciones
+                    {
+                        fin_de_esi = 0;
+                        sem_post(&esi_listo);
+                    }
+
+                    if(header->id == 25) //esi termino ejecucion
+                    {
+                        fin_de_esi = 1;
+                        sem_post(&esi_listo);
+                    }
                 }  
             }  
         }
@@ -331,13 +371,18 @@ void  send_hello(int socket)
     free(header_c);
 }
 
-/*void serialize_header(content_header * header, char** message)
+void send_message(int socket, int id)
 {
-	int offset=0;
+    send(socket, id, sizeof(id), 0);
+}
 
-	memcpy(*message, &(header->id), sizeof(header->id));
+void wait_question(int socket)
+{
+    int id;
 
-	offset = sizeof(header->id); 
+    recv(socket, id, sizeof(id), 0);
 
-	memcpy(*message + offset, &(header->len), sizeof(header->len));
-}*/
+    if (id == 32) //coordinador pregunta por clave bloqueada
+    if (id == 33) //coordinador pide desbloquear clave
+    if (id == 34) //coordinador no pregunta nada (operacion SET)
+}
