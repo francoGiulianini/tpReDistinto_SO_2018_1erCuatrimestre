@@ -24,6 +24,10 @@ int key_is_not_blocked = 1;
 int main(void) 
 {
 	pthread_mutex_init(&lock, NULL);
+    sem_init(&esi_operation, 1, 0);
+    sem_init(&scheduler_response, 1, 0);
+    sem_init(&result_set, 1, 0);
+
     configure_logger();
 
     config = config_create("Config.cfg");
@@ -115,8 +119,6 @@ void host_connections()
         {  
             perror("send"); 
         }  
-        
-        log_info(logger, "Welcome message sent successfully");
 
         header_c = (content_header*) malloc(sizeof(content_header));
         //Check if it was for closing , and also read the 
@@ -203,16 +205,12 @@ void host_instance(void* arg)
     {
         sem_wait(&instance->start);
 
-        //la instancia tiene que hacer algo previo?
-        /*if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
-            disconnect_socket(socket, true);*/
+        if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
+            disconnect_socket(socket, true);
 
-        log_warning(logger, "DEBUG: i'm the chosen one");
-        //enviar header con tamaño de clave y valor
-        //send(socket, header_nuevo, sizeof(header_nuevo), 0);
+        process_message_header(header, socket);
 
-        //enviar clave y valor
-        //send(socket, message_content, len, 0);
+        sem_post(&result_set);
     }
 
     free(header);
@@ -224,6 +222,10 @@ void host_esi(void* arg)
     int socket = data->socket;
     int len = data->next_message_len;
 
+    //asignar un nombre
+
+    t_dictionary * blocked_keys_by_this_esi = dictionary_create();
+
     int valread;
     content_header* header = malloc(sizeof(content_header));
 
@@ -232,9 +234,7 @@ void host_esi(void* arg)
         if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
             disconnect_socket(socket, false);
         
-        process_message_header(header, socket);
-
-
+        process_message_header_esi(header, socket, blocked_keys_by_this_esi);
     }
 
     free(header);
@@ -242,8 +242,6 @@ void host_esi(void* arg)
 
 void host_scheduler(void* arg)
 {
-    sem_init(&esi_operation, 1, 0);
-    sem_init(&scheduler_response, 1, 0);
     thread_data_t *data = (thread_data_t *) arg;
     int socket = data->socket;
     int len = data->next_message_len;
@@ -275,6 +273,9 @@ void host_scheduler(void* arg)
             }
             case 33: //abortar esi
             {
+                header->id = 33;
+                send(socket, header, sizeof(content_header*), 0);
+
                 break;
             }
         }
@@ -285,18 +286,19 @@ void host_scheduler(void* arg)
 
 void disconnect_socket(int socket, bool is_instance)
 {
-    //disconnected , get his details and print 
-    pthread_mutex_lock(&lock);
+    //disconnected , get his details and print   
     if(is_instance)
-        disconnect_instance_in_list(socket);
-    getpeername(socket , (struct sockaddr*)&serverAddress , \
-        (socklen_t*)&addrlen);  
+        {
+            pthread_mutex_lock(&lock);
+            disconnect_instance_in_list(socket);
+            pthread_mutex_unlock(&lock);
+        }
+    
+    getpeername(socket , (struct sockaddr*)&serverAddress , (socklen_t*)&addrlen);  
     log_info(logger, "Host disconnected , ip %s , port %d", 
         inet_ntoa(serverAddress.sin_addr) , ntohs(serverAddress.sin_port));  
-        
-    //Close the socket and mark as 0 in list for reuse 
+
     close(socket);
-    pthread_mutex_unlock(&lock);
     pthread_exit(NULL);
 }
 
@@ -314,31 +316,6 @@ void process_message_header(content_header* header, int socket)
             hello_id = ESI;
             log_info(logger,"Connected with an ESI");
             //agregar a vector de esis
-            break;
-        }
-        case 21: //ESI pide un GET
-        {
-            operation_get(message, socket);
-            
-            break;
-        }
-        case 22: //ESI pide un SET
-        {
-            log_info(logger, "ESI requested a SET");
-
-            sleep(delay);
-            //read(socket, message, header->len, 0);
-
-            pthread_mutex_lock(&lock);
-            int result = save_on_instance(instances);
-            pthread_mutex_unlock(&lock);
-
-            if(!result)
-                operation = 33; 
-                //avisar a planificador para abortar esi
-                //supongo que tambien tengo que cerrar el hilo
-            //else
-
             break;
         }
         case 30:
@@ -366,7 +343,30 @@ void process_message_header(content_header* header, int socket)
     }
 }
 
-void operation_get(content_header* header, int socket)
+void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys)
+{
+    switch(header->id)
+    {
+        case 21: //ESI pide un GET
+        {
+            operation_get(header, socket, blocked_keys);
+            
+            break;
+        }
+        case 22: //ESI pide un SET
+        {
+            operation_set(header, socket, blocked_keys);
+
+            break;
+        }
+        case 23: //ESI pide un STORE
+        {
+            break;
+        }
+    }
+}
+
+void operation_get(content_header* header, int socket, t_dictionary * blocked_keys)
 {
     sleep(delay);
     
@@ -381,12 +381,54 @@ void operation_get(content_header* header, int socket)
     assign_instance(algorithm, instances);          
     pthread_mutex_unlock(&lock);
     
-    send_answer(socket, key_is_not_blocked);  
+    send_answer(socket, key_is_not_blocked);
+
+    dictionary_put(blocked_keys, message->key, NULL); 
 }
 
-void send_answer(int socket,int key_is_blocked)
+void operation_set(content_header * header, int socket, t_dictionary * blocked_keys)
 {
-    if(key_is_blocked)
+    sleep(delay);
+    
+    recv(socket, message, header->len, 0);
+
+    //agregar el nombre del ESI
+    log_info(logger, "ESI requested a SET of Key: %s, with Value: %s", message->key, message->value);
+
+    if(!dictionary_has_key(blocked_keys, message->key))
+    {
+        log_info(logger, "But Key was not requested before. Aborting ESI");
+        abort_esi(socket);
+    }
+
+    pthread_mutex_lock(&lock);
+    int result = save_on_instance(instances);
+    pthread_mutex_unlock(&lock);
+
+    sem_wait(&result_set);
+
+    if(!result)
+    {
+        log_info(logger, "But Instance was not available. Aborting ESI");
+        abort_esi(socket);
+    }
+    else
+    {
+        log_info(logger, "Operation Successful");
+        send(socket, 24, sizeof(int), 0); //operacion con exito
+    }
+}
+
+void abort_esi(int socket)
+{
+    operation = 33;
+    sem_post(&esi_operation);
+    disconnect_socket(socket, false);
+}
+
+void send_answer(int socket,int key_is_not_blocked)
+{
+    if(!key_is_not_blocked)
     {
         send(socket, 22, sizeof(int), 0);
     }
