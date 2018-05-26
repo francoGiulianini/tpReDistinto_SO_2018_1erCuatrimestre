@@ -48,7 +48,15 @@ void Console(/*void *parameter*/)
 			{
 				//bloquear ESI
 				key = consoleReadArg(line, &consoleInputIndex);
+				if(null_argument(key, "<key>"))
+					break;
+
 				id = consoleReadArg(line, &consoleInputIndex);
+				if(null_argument(id, "<id>"))
+					break;
+
+				block_esi(key, id);
+
 				log_info(logger, "The Scheduler blocked an ESI with key: %s and id: %s by command", key, id);
 				free(key);
 				free(id);
@@ -59,9 +67,8 @@ void Console(/*void *parameter*/)
 				//desbloquear clave
 				key = consoleReadArg(line, &consoleInputIndex);
 				if(null_argument(key, "<key>"))
-					{
-						break;
-					}
+					break;
+
 				log_info(logger, "The Scheduler unlocked the key: %s by command", key);
 				free(key);
 				break;
@@ -171,4 +178,33 @@ int null_argument(char* arg_console, char* for_logger)
 		return 1;
 	}
 	return 0;
+}
+
+void block_esi(char * key, char * id)
+{
+	//ver si esta ejecutando o en listo
+	t_esi * otro_esi = find_by_id(cola_ready, id);
+	
+	un_key = find_by_key(lista_bloqueados, key);
+
+	if(!otro_esi == NULL) //esta en cola listo
+		queue_push(un_key->cola_bloqueados, otro_esi);
+	else	//esta en ejecucion
+	{
+		queue_push(un_key->cola_bloqueados, un_esi);
+		bloquear_esi = 1;
+	}
+
+	list_add(lista_bloqueados, un_key);
+}
+
+void list_blocked_esis()
+{
+
+}
+
+t_esi * find_by_id(t_queue * cola, char* id)
+{
+	//usar queue_size para sacar todos los elemento
+	//menos el que necesito
 }
