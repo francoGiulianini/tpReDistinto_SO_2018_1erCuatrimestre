@@ -13,6 +13,7 @@
 char* port_c;
 char* ip_c;
 char* name;
+int noHayLugar;
 
 int main(void) 
 {
@@ -23,7 +24,41 @@ int main(void)
     get_values_from_config(logger, config);
 	int coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
 	send_hello(coordinator_socket);
-	while(1);
+	
+	recibirTamanos();
+
+	char* mem = malloc(sizeof (char) *configuracion.cantEntradas*configuracion.tamanioEntradas);
+	while(1)
+	{
+	content_header *header = malloc (sizeof (content_header));
+
+	recv(coordinator_socket, header, sizeof (content_header), 0);
+
+	content *mensaje = malloc (header->lenClave + header->lenValor);
+
+	recv(coordinator_socket, mensaje, sizeof (header->lenClave + header->lenValor), 0);
+
+	int posicion = consultarTabla (mensaje);
+
+	if (noHayLugar){
+		send(coordinator_socket, 11, sizeof(int), 0); //hay que compactar
+
+		//activar semaforo
+
+		int posicion = consultarTabla (mensaje);
+
+	}
+
+	guardarEnMem (mem,mensaje,posicion);
+
+
+	send(coordinator_socket, 12, sizeof(int), 0);
+
+	free(header->lenClave);
+	free(header->lenValor);
+	free(header);
+	free(mensaje);
+	}
 	return EXIT_SUCCESS;
 }
 
@@ -119,4 +154,22 @@ void  send_hello(int socket)
 	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
 		exit_with_error(logger, "Cannot send Hello");
+}
+void recibirTamanos ()
+{
+	configuracion = malloc(sizeof(configuracion_t));
+
+	recv
+}
+
+
+// funciones auxiliares, ignorelas
+
+int lenEnBloques (lenMensaje)
+float aux = lenMensaje / lenBloqueDeMem
+if (aux / 
+
+
+consultarTabla (mensaje){
+
 }

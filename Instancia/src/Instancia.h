@@ -16,6 +16,7 @@ typedef struct
 {
     int id;
     int len;
+    int len2;
 } __attribute__((packed)) content_header;
 
 t_log * logger;
