@@ -70,6 +70,22 @@ void get_config_values(t_config* config)
         }
     else
         exit_with_error(logger, "Cannot read Delay from config file");
+
+    if(config_has_property(config, "CantidadEntradas"))
+        {
+            config_for_instance.number = config_get_int_value(config, "CantidadEntradas");
+            log_info(logger, "Number of Entries from config file: %d", config_for_instance.number);
+        }
+    else
+        exit_with_error(logger, "Cannot read Number of Entries from config file");
+
+    if(config_has_property(config, "TamanioEntrada"))
+        {
+            config_for_instance.size = config_get_int_value(config, "TamanioEntrada");
+            log_info(logger, "Size of Entries from config file: %d", config_for_instance.size);
+        }
+    else
+        exit_with_error(logger, "Cannot read Delay from config file");
 }
 
 void create_server()
@@ -199,13 +215,26 @@ void host_instance(void* arg)
 
     instance = add_instance_to_list(name, socket);
 
+    send(socket, config_for_instance, sizeof(config_instance), 0);
+
     char* header = malloc(sizeof(content_header));
 
     while(1)
     {
         sem_wait(&instance->start);
 
-        if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
+        int len1 = strlen(message->key);
+        int len2 = strlen(message->value);
+
+        header->id = 12;
+        header->len = len1;
+        //header->len2 = len2;
+
+        send(socket, header, sizeof(content_header), 0);
+        
+        send(socket, message, len1 + len2, 0);
+
+        if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
             disconnect_socket(socket, true);
 
         process_message_header(header, socket);
@@ -309,6 +338,18 @@ void process_message_header(content_header* header, int socket)
         case 10:
         {
             hello_id = INSTANCE;
+            break;
+        }
+        case 11:    //compactar
+        {
+            initiate_compactation();
+
+            break;
+        }
+        case 12: //todo ok
+        {
+            
+
             break;
         }
         case 20:
@@ -417,6 +458,16 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
         log_info(logger, "Operation Successful");
         send(socket, 24, sizeof(int), 0); //operacion con exito
     }
+}
+
+void initiate_compactation()
+{
+    void _send_to_instance(instance_t * i)
+    {
+        send(i->socket, 11, sizeof(int), 0);
+    }
+
+    list_iterate(instances, _send_to_instance);
 }
 
 void abort_esi(int socket)

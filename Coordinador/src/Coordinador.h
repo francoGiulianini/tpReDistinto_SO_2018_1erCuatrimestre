@@ -53,6 +53,12 @@ typedef struct
     sem_t start;
 } instance_t;
 
+typedef struct
+{
+    int number;
+    int size;
+} __attribute__((packed)) config_instance;
+
 typedef struct 
 {
     int next_message_len;
@@ -67,6 +73,7 @@ struct sockaddr_in serverAddress;
 _Client hello_id;
 t_list * instances;
 message_content* message;
+config_instance config_for_instance;
 sem_t esi_operation;
 sem_t scheduler_response;
 sem_t result_set;
@@ -83,6 +90,7 @@ void process_message_header(content_header* header, int socket);
 void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys);
 void operation_get(content_header* header, int socket, t_dictionary * blocked_keys);
 void operation_set(content_header* header, int socket, t_dictionary * blocked_keys);
+void initiate_compactation();
 void abort_esi(int socket);
 void send_answer(int socket,int key_bool);
 void assign_instance(_Algorithm algorithm, t_list* instances);
