@@ -15,12 +15,25 @@
 typedef struct
 {
     int id;
-    int len;
-    int len2;
+    int lenClave;
+    int lenValor;
 } __attribute__((packed)) content_header;
+
+typedef struct
+{
+    char* clave;
+    char* valor;
+}__attribute__((packed)) content;
+
+typedef struct
+{
+    int cantEntradas;
+    int tamanioEntradas;
+}__attribute__((packed)) configuracion_t;
 
 t_log * logger;
 t_config * config;
+configuracion_t cofiguracion;
 
 void configure_logger();
 void exit_with_error(t_log* logger, char* error_message);
