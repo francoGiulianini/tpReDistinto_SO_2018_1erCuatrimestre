@@ -2,8 +2,8 @@
 
 * Protocolo ( a debatir)  : 
 
-		- Header:  (Tipo + Tamaño Del Mensaje)
-		- Mensaje: (Tamaño variable)
+		- Header:  (Tipo + Tamaño De Clave + Tamaño de Valor)
+		- Mensaje: (Clave + Valor)
 
 * Como compilar:
 
@@ -15,6 +15,7 @@ ID headers:(se le envian)(ID+TamañoMensaje)
 
   		-10: hola soy una instancia + tamaño del nombre
   		-11: instancia tiene que compactar
+		-12: instancia guardo ok
 		
   		-20: hola soy un esi
   		-21: esi pide un GET
@@ -32,6 +33,7 @@ ID headers:(se le envian)(ID+TamañoMensaje)
   		-21: listo para ejecutar
   		-22: ejecucion con exito
   		-23: ejecucion bloqueo
+		-24: termino ejecucion o aborto
   
   		-31: coordinador pide chequear clave  
   		-32: coordinador pide desbloquear clave
