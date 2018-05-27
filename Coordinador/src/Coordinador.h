@@ -19,6 +19,7 @@
 #include <commons/config.h>
 #include <commons/string.h>
 #include <commons/collections/list.h>
+#include <commons/collections/dictionary.h>
 #include <pthread.h>
 #include <semaphore.h>
 #include <errno.h>
@@ -34,6 +35,7 @@ typedef struct
 {
     int id;
     int len;
+    int len2;
 } __attribute__((packed)) content_header;
 
 typedef struct
@@ -52,6 +54,12 @@ typedef struct
     sem_t start;
 } instance_t;
 
+typedef struct
+{
+    int number;
+    int size;
+} __attribute__((packed)) config_instance;
+
 typedef struct 
 {
     int next_message_len;
@@ -66,6 +74,10 @@ struct sockaddr_in serverAddress;
 _Client hello_id;
 t_list * instances;
 message_content* message;
+config_instance* config_for_instance;
+sem_t esi_operation;
+sem_t scheduler_response;
+sem_t result_set;
 
 void configure_logger();
 void get_config_values(t_config* config);
@@ -76,6 +88,13 @@ void host_instance(void* arg);
 void host_esi(void* arg);
 void host_scheduler(void* arg);
 void process_message_header(content_header* header, int socket);
+void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
+void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
+void operation_set(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
+void initiate_compactation();
+void abort_esi(int socket);
+void send_answer(int socket,int key_bool);
+void send_header(int socket, int id);
 void assign_instance(_Algorithm algorithm, t_list* instances);
 int save_on_instance(t_list* instances);
 void disconnect_socket(int socket, bool is_instance);

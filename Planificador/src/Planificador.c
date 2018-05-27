@@ -18,18 +18,29 @@ int listeningPort;
 int socket_c;
 char* ip_c;
 char* port_c;
+int fin_de_esi = 1;
+int abortar_esi = 1;
+int respuesta_ok = 1;
 
 int main(void)
 {
 	configure_logger();
+    sem_init(&esi_listo, 1, 1);
+    sem_init(&coordinador_listo, 1, 0);
+    sem_init(&coordinador_pregunta, 1, 0);
+    sem_init(&esi_respuesta, 1, 0);
     pthread_mutex_init(&pause_mutex, NULL);
     cola_ready = queue_create();
+    lista_bloqueados = list_create();
+    block_esi = 0;
 
     config = config_create("Config.cfg");
     if(config == NULL)
         exit_with_error(logger, "Cannot open config file");
 
     get_values_from_config(logger, config);
+
+    new_blocked_keys(); //agrega las claves bloqueadas desde config
 	
     //aqui se conecta con el coordinador
     socket_c = connect_to_server(ip_c, port_c, "Coordinator");
@@ -48,11 +59,43 @@ int main(void)
 		log_error(logger, "Couldn't create Server Thread");
 	}
 
+    sem_wait(&coordinador_listo);
+
 	//Codigo del Planificador
 	while (stop != 1)
-	{
-		pthread_mutex_lock(&pause_mutex);
-        //printf("hello"); use at your own risk :-)
+	{    
+		sem_wait(&esi_listo);
+        pthread_mutex_lock(&pause_mutex);
+
+        if(fin_de_esi)
+        {
+            un_esi = queue_pop(cola_ready);
+            fin_de_esi = 0;
+        }
+        
+        send_header(un_esi->socket, 21); //ejecutar una instruccion
+        
+        if(abortar_esi)
+        {
+            continue;
+            pthread_mutex_unlock(&pause_mutex);
+        }
+
+        sem_wait(&coordinador_pregunta);
+
+        if(key_blocked)
+            send_header(socket_c, 32); //31 clave libre 32 clave bloqueada
+        else
+            send_header(socket_c, 31);
+
+        sem_wait(&esi_respuesta);
+
+        if(!respuesta_ok && !block_esi)
+        {
+            block_esi = 0;
+            //bloquear_esi(un_esi);
+        }
+
         pthread_mutex_unlock(&pause_mutex);
 	}
 
@@ -106,10 +149,26 @@ void get_string_value(t_log* logger, char* key, char* *value, t_config* config)
 
 void configure_logger()
 {
-  logger = log_create("Planificador.log", "Planificador", true, LOG_LEVEL_INFO);
+    logger = log_create("Planificador.log", "Planificador", true, LOG_LEVEL_INFO);
 }
 
-void HostConnections(/*void * parameter*/)
+void new_blocked_keys()
+{
+    char** blocked_keys = config_get_array_value(config, "ClavesBloqueadas");
+
+    for(int i = 0; blocked_keys[i] != NULL; i++)
+    {
+        clave_bloqueada_t * clave_bloqueada = malloc(sizeof(clave_bloqueada_t));
+
+        clave_bloqueada->cola_esis_bloqueados = queue_create();
+        clave_bloqueada->key = blocked_keys[i];
+
+        list_add(lista_bloqueados, clave_bloqueada);
+        log_info(logger, "Updated Blocked Keys with %s", clave_bloqueada->key);
+    }
+}
+
+void HostConnections()
 {
 	char * message = "Welcome";
     int num_esi = 0;
@@ -253,26 +312,52 @@ void HostConnections(/*void * parameter*/)
 
                         new_esi->socket = sd;
                         new_esi->name = name;
-                        //memcpy(new_esi.name, name, strlen(name) + 1);  
                     
                         //se agrega a la cola de ready
                         queue_push(cola_ready, new_esi);
                         log_info(logger, "New ESI added to the queue as %s", new_esi->name);
-                        
-                        //free(name);
-                        //free(new_esi->name);
-                        //free(new_esi);
+                    }
+
+                    if(header->id == 22)
+                    {
+                        respuesta_ok = 1;
+                        sem_post(&esi_respuesta);
                     }
                     
-                    //DEBUG ONLY
-                    
-                    t_esi * test_esi = queue_pop(cola_ready);
-                    log_warning(logger, "DEBUG: ESI name: %s in socket: %d", test_esi->name, test_esi->socket);
-                    
-                    //set the string terminating NULL byte on the end 
-                    //of the data read 
-                    /*buffer[valread] = '\0';  
-                    send(sd , buffer , strlen(buffer) , 0 );  */
+                    if(header->id == 23)
+                    {
+                        respuesta_ok = 0;
+                        sem_post(&esi_respuesta);
+                    }
+
+                    if(header->id == 24) //esi termino ejecucion
+                    {
+                        fin_de_esi = 1;
+                        respuesta_ok = 1;
+                        abortar_esi = 1;
+                        sem_post(&esi_listo);
+                    }
+
+                    if (header->id == 31) //coordinador pregunta por clave bloqueada
+                    {
+                        content_message* message = malloc(header->len + header->len2);
+
+                        recv(socket, message, header->len + header->len2, 0);
+    
+                        check_key(message->key);
+                        sem_post(&coordinador_pregunta);
+                    }
+                    if (header->id == 32) //coordinador pide desbloquear clave
+                    {
+                        content_message* message = malloc(header->len + header->len2);
+
+                        recv(socket, message, header->len + header->len2, 0);
+
+                        unlock_key(message->key);
+                        sem_post(&coordinador_pregunta);
+                    }
+                    if (header->id == 33) //coordinador no pregunta nada (operacion SET)
+                        sem_post(&coordinador_pregunta);
                 }  
             }  
         }
@@ -318,7 +403,7 @@ int connect_to_server(char * ip, char * port, char *server)
 	return server_socket;
 }
 
-void  send_hello(int socket) 
+void send_hello(int socket) 
 {
     content_header * header_c = (content_header*) malloc(sizeof(content_header));
 
@@ -331,13 +416,10 @@ void  send_hello(int socket)
     free(header_c);
 }
 
-/*void serialize_header(content_header * header, char** message)
+void send_header(int socket, int id)
 {
-	int offset=0;
-
-	memcpy(*message, &(header->id), sizeof(header->id));
-
-	offset = sizeof(header->id); 
-
-	memcpy(*message + offset, &(header->len), sizeof(header->len));
-}*/
+    content_header * header = malloc(sizeof(content_header));
+    header->id = id;
+    
+    send(socket, header, sizeof(content_header), 0);
+}
