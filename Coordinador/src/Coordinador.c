@@ -20,6 +20,8 @@ int addrlen = sizeof(serverAddress);
 char * welcome_message = "Welcome";
 content_header * header_c;
 int key_is_not_blocked = 1;
+int num_esi = 0;
+int result = 1;
 
 int main(void) 
 {
@@ -73,16 +75,16 @@ void get_config_values(t_config* config)
 
     if(config_has_property(config, "CantidadEntradas"))
         {
-            config_for_instance.number = config_get_int_value(config, "CantidadEntradas");
-            log_info(logger, "Number of Entries from config file: %d", config_for_instance.number);
+            config_for_instance->number = config_get_int_value(config, "CantidadEntradas");
+            log_info(logger, "Number of Entries from config file: %d", config_for_instance->number);
         }
     else
         exit_with_error(logger, "Cannot read Number of Entries from config file");
 
     if(config_has_property(config, "TamanioEntrada"))
         {
-            config_for_instance.size = config_get_int_value(config, "TamanioEntrada");
-            log_info(logger, "Size of Entries from config file: %d", config_for_instance.size);
+            config_for_instance->size = config_get_int_value(config, "TamanioEntrada");
+            log_info(logger, "Size of Entries from config file: %d", config_for_instance->size);
         }
     else
         exit_with_error(logger, "Cannot read Delay from config file");
@@ -217,7 +219,7 @@ void host_instance(void* arg)
 
     send(socket, config_for_instance, sizeof(config_instance), 0);
 
-    char* header = malloc(sizeof(content_header));
+    content_header* header = malloc(sizeof(content_header));
 
     while(1)
     {
@@ -228,14 +230,17 @@ void host_instance(void* arg)
 
         header->id = 12;
         header->len = len1;
-        //header->len2 = len2;
+        header->len2 = len2;
 
         send(socket, header, sizeof(content_header), 0);
         
         send(socket, message, len1 + len2, 0);
 
         if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
-            disconnect_socket(socket, true);
+            {
+                result = 0;
+                disconnect_socket(socket, true);
+            }
 
         process_message_header(header, socket);
 
@@ -252,6 +257,13 @@ void host_esi(void* arg)
     int len = data->next_message_len;
 
     //asignar un nombre
+    num_esi++;
+
+    char* name = (char*)malloc(7);
+    if(num_esi < 10)
+        sprintf(name, "ESI0%d", num_esi);
+    else 
+        sprintf(name, "ESI%d", num_esi);
 
     t_dictionary * blocked_keys_by_this_esi = dictionary_create();
 
@@ -263,7 +275,7 @@ void host_esi(void* arg)
         if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
             disconnect_socket(socket, false);
         
-        process_message_header_esi(header, socket, blocked_keys_by_this_esi);
+        process_message_header_esi(header, socket, blocked_keys_by_this_esi, name);
     }
 
     free(header);
@@ -288,9 +300,11 @@ void host_scheduler(void* arg)
             case 31: //preguntar por clave
             {
                 header->id = 31;
-                send(socket, header, sizeof(content_header*), 0);
+                send(socket, header, sizeof(content_header), 0);
 
-                recv(socket, key_id, sizeof(int), 0);
+                send(socket, message, header->len, 0);
+
+                recv(socket, header, sizeof(content_header), 0);
 
                 process_message_header(header, socket);
                 sem_post(&scheduler_response);
@@ -303,12 +317,22 @@ void host_scheduler(void* arg)
             case 33: //abortar esi
             {
                 header->id = 33;
-                send(socket, header, sizeof(content_header*), 0);
+                send(socket, header, sizeof(content_header), 0);
+
+                break;
+            }
+            case 34: //operacion set
+            {
+                header->id = 34;
+                send(socket, header, sizeof(content_header), 0);
 
                 break;
             }
         }
 
+        free(header->id);
+        free(header->len);
+        free(header->len2);
         free(header);
     }
 }
@@ -348,8 +372,6 @@ void process_message_header(content_header* header, int socket)
         }
         case 12: //todo ok
         {
-            
-
             break;
         }
         case 20:
@@ -384,19 +406,19 @@ void process_message_header(content_header* header, int socket)
     }
 }
 
-void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys)
+void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
     switch(header->id)
     {
         case 21: //ESI pide un GET
         {
-            operation_get(header, socket, blocked_keys);
+            operation_get(header, socket, blocked_keys, name);
             
             break;
         }
         case 22: //ESI pide un SET
         {
-            operation_set(header, socket, blocked_keys);
+            operation_set(header, socket, blocked_keys, name);
 
             break;
         }
@@ -407,13 +429,15 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
     }
 }
 
-void operation_get(content_header* header, int socket, t_dictionary * blocked_keys)
+void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
     sleep(delay);
     
+    message = malloc(sizeof(char) * header->len + 1);
+
     recv(socket, message, header->len, 0);
 
-    log_info(logger, "ESI requested a GET of key: %s", message->key);
+    log_info(logger, "%s requested a GET of key: %s", name, message->key);
     sem_post(&esi_operation);
 
     sem_wait(&scheduler_response);
@@ -424,17 +448,23 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     
     send_answer(socket, key_is_not_blocked);
 
-    dictionary_put(blocked_keys, message->key, NULL); 
+    dictionary_put(blocked_keys, message->key, NULL);
+
+    free(message->key);
+    free(message->value);
+    free(message); 
 }
 
-void operation_set(content_header * header, int socket, t_dictionary * blocked_keys)
+void operation_set(content_header * header, int socket, t_dictionary * blocked_keys, char* name)
 {
     sleep(delay);
     
-    recv(socket, message, header->len, 0);
+    message = malloc(sizeof(char) * header->len + header->len2);
+
+    recv(socket, message, header->len + header->len2, 0);
 
     //agregar el nombre del ESI
-    log_info(logger, "ESI requested a SET of Key: %s, with Value: %s", message->key, message->value);
+    log_info(logger, "%s requested a SET of Key: %s, with Value: %s", name, message->key, message->value);
 
     if(!dictionary_has_key(blocked_keys, message->key))
     {
@@ -443,8 +473,11 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     }
 
     pthread_mutex_lock(&lock);
-    int result = save_on_instance(instances);
+    result = save_on_instance(instances);
     pthread_mutex_unlock(&lock);
+
+    operation = 34;
+    sem_post(&esi_operation);
 
     sem_wait(&result_set);
 
@@ -456,15 +489,19 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     else
     {
         log_info(logger, "Operation Successful");
-        send(socket, 24, sizeof(int), 0); //operacion con exito
+        send_header(socket, 24); //operacion con exito
     }
+
+    free(message->key);
+    free(message->value);
+    free(message); 
 }
 
 void initiate_compactation()
 {
     void _send_to_instance(instance_t * i)
     {
-        send(i->socket, 11, sizeof(int), 0);
+        send_header(i->socket, 11);
     }
 
     list_iterate(instances, _send_to_instance);
@@ -481,12 +518,20 @@ void send_answer(int socket,int key_is_not_blocked)
 {
     if(!key_is_not_blocked)
     {
-        send(socket, 22, sizeof(int), 0);
+        send_header(socket, 22);
     }
     else
     {
-        send(socket, 23, sizeof(int), 0);
+        send_header(socket, 23);
     }
+}
+
+void send_header(int socket, int id)
+{
+    content_header* header = malloc(sizeof(content_header));
+    header->id = id;
+        
+    send(socket, header, sizeof(content_header), 0);
 }
 
 void assign_instance(_Algorithm algorithm, t_list* instances)
