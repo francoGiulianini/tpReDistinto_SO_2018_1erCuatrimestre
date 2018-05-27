@@ -1,7 +1,7 @@
 /*
  ============================================================================
  Name        : ESI.c
- Author      : 
+ Author      : Los Más Mejores (2018)
  Version     :
  Copyright   : Los Mas Mejores Â©
  Description : Script en C, Ansi-style
@@ -21,6 +21,9 @@ ssize_t read;
 char * line = NULL;
 t_esi_operacion parsed;
 size_t len = 0;
+bool flag_blocked = false;
+int scheduler_socket;
+int coordinator_socket;
 
 int main(int argc, char* argv[]) 
 {
@@ -38,19 +41,22 @@ int main(int argc, char* argv[])
 
     get_values_from_config(logger, config);
 
-	int scheduler_socket = connect_to_server(ip_s, port_s, "Scheduler");
+	scheduler_socket = connect_to_server(ip_s, port_s, "Scheduler");
 
 	send_hello(scheduler_socket);
 
-	int coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
-
-	send_hello(coordinator_socket);
+	coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
+	
+	content_header * buffer = (content_header*) malloc(sizeof(content_header));
 
 	while(1)
 	{
-		send_next_operation();
+		recv(scheduler_socket, buffer, sizeof(content_header), 0);
+		if (!flag_blocked) parsed = parse_line();
+		send_parsed_operation(&parsed, &flag_blocked);
 	}
 
+	free(buffer);
 	return EXIT_SUCCESS;
 }
 
@@ -153,50 +159,97 @@ int connect_to_server(char * ip, char * port, char *server)
 	return server_socket;
 }
 
-void  send_hello(int socket) 
+void  send_message(int socket, int id, char * message1, char * message2) 
 {
 	content_header * header_c = (content_header*) malloc(sizeof(content_header));
 
-    header_c->id=20;
-    header_c->len=0;
+	int len_message1 = strlen(message1);
+	int len_message2 = strlen(message2);
+    header_c->id = id;
+    header_c->len = len_message1;
+	header_c->len2 = len_message2;
 
 	int result = send(socket, header_c, sizeof(content_header), 0);
-	if (result <= 0)
-		log_error(logger, "cannot send hello");		//¿Por qué se usa este y no el de abajo?
-		//exit_with_error(logger, "Cannot send Hello");		<----	¿Por qué esta comentado esto?
+	t_message * message = (t_message *) malloc ((len_message1 + len_message2) * sizeof(char)); //PUEDE llegar a romper
+	message->key = message1;
+	message->value = message2;
+	
 	free(header_c);
+	
+	if (result <= 0)
+		exit_with_error(logger, "Cannot send Header for Message: %s, with instruction %d", message, id);
+	
+	if (len_message > 0)
+		result = send(socket, message, (len_message1 + len_message2), 0);
+	
+	if (result <= 0)
+		exit_with_error(logger, "Cannot send Payload for Message: %s, with instruction %d" message, id);
 }
 
-void send_next_operation()
+void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 {
-	if ((read = getline(&line, &len, script)) != -1)
-		{
-		        t_esi_operacion parsed = parse(line);
+	content_header * buffer = (content_header*) malloc(sizeof(content_header));
+	int result;
 
-		        if(parsed.valido){
-		            switch(parsed.keyword){	//El comportamiento dentro de cada case deberia ser el de mandar al Coordinador lo parseado,
-		                case GET:			//chequear que no haya errores, y si el ESI esta bloqueado volver atras el puntero del script
-		                    printf("GET\tclave: <%s>\n", parsed.argumentos.GET.clave);
-		                    break;
-		                case SET:
-		                    printf("SET\tclave: <%s>\tvalor: <%s>\n", parsed.argumentos.SET.clave, parsed.argumentos.SET.valor);
-		                    break;
-		                case STORE:
-		                    printf("STORE\tclave: <%s>\n", parsed.argumentos.STORE.clave);
-		                    break;
-		                default:
-		                    exit_with_error(logger, "unable to interprete line from script");
-		            }
+	if(parsed.valido){
 
-		            destruir_operacion(parsed);
-		        } else {
-		        	exit_with_error(logger, "line from script is not valid");
-		        }
-
-		        if(feof(script)) exit(EXIT_SUCCESS);
-
-		} else {
-			exit_with_error("unable to read line from script");
+		switch(parsed.keyword){
+			case GET:
+				send_message(coordinator_socket, 21, parsed.argumentos.GET.clave, "");
+				break;
+			case SET:
+				send_message(coordinator_socket, 22, parsed.argumentos.SET.clave, parsed.argumentos.SET.valor); // el ESI tambien manda el valor
+				break;
+			case STORE:
+				send_message(coordinator_socket, 23, parsed.argumentos.STORE.clave, "");
+				break;
+			default:
+				exit_with_error(logger, "unable to interprete line from script");
 		}
 
+	result = recv(coordinator_socket, buffer, sizeof(content_header), 0);
+	switch (result){
+		case -1:
+			exit_with_error(logger, "Cannot receive expected answer from Coordinator");
+			break;
+		case 0:
+			exit_with_error(logger, "Coordinator Disconnected");
+			break;
+		default:
+			break;
+	}
+
+		switch (buffer->id)
+		{
+			case 31:
+				send_message(scheduler_socket, 22, "", "");
+				destruir_operacion(parsed);
+				break;
+			case 32:
+				bloqueado = true;
+				send_message(scheduler_socket, 23, "", "");
+				break;
+			default:
+				exit_with_error(logger, "Message type not valid: %d", buffer->id);
+		}
+		free(buffer);
+	}
+	else
+	{
+		exit_with_error(logger, "line from script is not valid");
+	}
+
+	if(feof(script)) exit(EXIT_SUCCESS);
+}
+
+t_esi_operacion parse_line() {
+	if ((read = getline(&line, &len, script)) != -1)
+	{
+		t_esi_operacion parsed = parse(line);
+		return parsed;
+	}
+	else
+	{
+			exit_with_error("unable to read line from script");
+	}
 }
