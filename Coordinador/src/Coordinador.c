@@ -49,45 +49,52 @@ int main(void)
 void get_config_values(t_config* config)
 {
     if(config_has_property(config, "PuertoEscucha"))
-        {
-            listeningPort = config_get_int_value(config, "PuertoEscucha");
-            log_info(logger, "Port from config file: %d", listeningPort);
-        }
+    {
+        listeningPort = config_get_int_value(config, "PuertoEscucha");
+        log_info(logger, "Port from config file: %d", listeningPort);
+    }
     else
         exit_with_error(logger, "Cannot read port from config file");
 
     if(config_has_property(config, "AlgoritmoDistribucion"))
-        {
-            char* alg_aux = config_get_string_value(config, "AlgoritmoDistribucion");
-            algorithm = to_algorithm(alg_aux);
-            log_info(logger, "Algorithm from config file: %s", alg_aux);
-        }
+    {
+        char* alg_aux = config_get_string_value(config, "AlgoritmoDistribucion");
+        algorithm = to_algorithm(alg_aux);
+        log_info(logger, "Algorithm from config file: %s", alg_aux);
+    }
     else
         exit_with_error(logger, "Cannot read algorithm from config file");
 
     if(config_has_property(config, "Retardo"))
-        {
-            delay = config_get_int_value(config, "Retardo");
-            log_info(logger, "Delay from config file: %d", delay);
-        }
+    {
+        delay = config_get_int_value(config, "Retardo");
+        log_info(logger, "Delay from config file: %d", delay);
+    }
     else
         exit_with_error(logger, "Cannot read Delay from config file");
 
+    config_for_instance = malloc(sizeof(config_instance));
+
+    int aux_number;
     if(config_has_property(config, "CantidadEntradas"))
-        {
-            config_for_instance->number = config_get_int_value(config, "CantidadEntradas");
-            log_info(logger, "Number of Entries from config file: %d", config_for_instance->number);
-        }
+    {
+        aux_number = config_get_int_value(config, "CantidadEntradas");
+        log_info(logger, "Number of Entries from config file: %d", aux_number);
+    }
     else
         exit_with_error(logger, "Cannot read Number of Entries from config file");
 
+    int aux_size;
     if(config_has_property(config, "TamanioEntrada"))
-        {
-            config_for_instance->size = config_get_int_value(config, "TamanioEntrada");
-            log_info(logger, "Size of Entries from config file: %d", config_for_instance->size);
-        }
+    {
+        aux_size = config_get_int_value(config, "TamanioEntrada");
+        log_info(logger, "Size of Entries from config file: %d", aux_size);
+    }
     else
         exit_with_error(logger, "Cannot read Delay from config file");
+
+    config_for_instance->number = aux_number;
+    config_for_instance->size = aux_size;
 }
 
 void create_server()
