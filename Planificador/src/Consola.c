@@ -55,7 +55,7 @@ void Console(/*void *parameter*/)
 				if(null_argument(id, "<id>"))
 					break;
 
-				block_esi(key, id);
+				block_esi_by_console(key, id);
 
 				log_info(logger, "The Scheduler blocked an ESI with key: %s and id: %s by command", key, id);
 				free(key);
@@ -77,7 +77,10 @@ void Console(/*void *parameter*/)
 			{
 				//mostrar los esi bloqueados por el recurso
 				resource = consoleReadArg(line, &consoleInputIndex);
-				log_info(logger, "List of ESIs blocked waiting for resource: %s by command", resource);
+				if(null_argument(key, "<key>"))
+					break;
+
+				list_blocked_esis(resource);
 				free(resource);
 				break;
 			}
@@ -180,31 +183,52 @@ int null_argument(char* arg_console, char* for_logger)
 	return 0;
 }
 
-void block_esi(char * key, char * id)
+void block_esi_by_console(char * key, char * id)
 {
+	sem_wait(&esi_executing);
+	pthread_mutex_lock(&pause_mutex);
 	//ver si esta ejecutando o en listo
 	t_esi * otro_esi = find_by_id(cola_ready, id);
 	
-	un_key = find_by_key(lista_bloqueados, key);
+	clave_bloqueada_t* un_key = find_by_key(lista_bloqueados, key);
 
 	if(!otro_esi == NULL) //esta en cola listo
-		queue_push(un_key->cola_bloqueados, otro_esi);
+		queue_push(un_key->cola_esis_bloqueados, otro_esi);
 	else	//esta en ejecucion
 	{
-		queue_push(un_key->cola_bloqueados, un_esi);
-		bloquear_esi = 1;
+		queue_push(un_key->cola_esis_bloqueados, un_esi);
+		blocked_esi_by_console = 1;
 	}
 
 	list_add(lista_bloqueados, un_key);
+	pthread_mutex_unlock(&pause_mutex);
 }
 
-void list_blocked_esis()
+void list_blocked_esis(char* resource)
 {
+	clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, resource);
 
+	if(a_key == NULL)
+	{
+		log_warning(logger, "Requested Key doesnt exist");
+	}
+
+	void _log_all_esis(t_esi* an_esi)
+	{
+		printf("%s\n", an_esi->name);
+	}
+
+	printf("ESIS Blocked waiting for: %s", resource);
+	list_iterate(a_key->cola_esis_bloqueados, _log_all_esis);
 }
 
 t_esi * find_by_id(t_queue * cola, char* id)
 {
 	//usar queue_size para sacar todos los elemento
 	//menos el que necesito
+}
+
+clave_bloqueada_t * find_by_key(t_list * lista, char* key)
+{
+
 }
