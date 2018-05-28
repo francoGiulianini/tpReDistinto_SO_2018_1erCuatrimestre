@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <commons/log.h>
 #include <commons/config.h>
+#include <parsi/parser.h>
 
 #define WELCOME_MSG 8
 
@@ -17,6 +18,7 @@ typedef struct
 {
     int id;
     int len;
+    int len2;
 } __attribute__((packed)) content_header;
 
 t_config* config;

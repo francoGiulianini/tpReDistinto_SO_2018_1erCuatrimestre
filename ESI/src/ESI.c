@@ -1,7 +1,7 @@
 /*
  ============================================================================
  Name        : ESI.c
- Author      : Los Más Mejores (2018)
+ Author      : Los Mï¿½s Mejores (2018)
  Version     :
  Copyright   : Los Mas Mejores Â©
  Description : Script en C, Ansi-style
@@ -43,9 +43,11 @@ int main(int argc, char* argv[])
 
 	scheduler_socket = connect_to_server(ip_s, port_s, "Scheduler");
 
-	send_hello(scheduler_socket);
+	send_message(scheduler_socket, 20, "", "");
 
 	coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
+
+	send_message(coordinator_socket, 20, "", "");
 	
 	content_header * buffer = (content_header*) malloc(sizeof(content_header));
 
@@ -53,7 +55,7 @@ int main(int argc, char* argv[])
 	{
 		recv(scheduler_socket, buffer, sizeof(content_header), 0);
 		if (!flag_blocked) parsed = parse_line();
-		send_parsed_operation(&parsed, &flag_blocked);
+		send_parsed_operation(parsed, &flag_blocked);
 	}
 
 	free(buffer);
@@ -159,7 +161,7 @@ int connect_to_server(char * ip, char * port, char *server)
 	return server_socket;
 }
 
-void  send_message(int socket, int id, char * message1, char * message2) 
+void send_message(int socket, int id, char * message1, char * message2) 
 {
 	content_header * header_c = (content_header*) malloc(sizeof(content_header));
 
@@ -177,13 +179,18 @@ void  send_message(int socket, int id, char * message1, char * message2)
 	free(header_c);
 	
 	if (result <= 0)
-		exit_with_error(logger, "Cannot send Header for Message: %s, with instruction %d", message, id);
-	
-	if (len_message > 0)
+	{
+		log_error(logger, "Cannot send Header for Message: %s, with instruction %d", message, id);
+		exit_with_error(logger, "");
+	}
+	if (len_message1 > 0)
 		result = send(socket, message, (len_message1 + len_message2), 0);
 	
 	if (result <= 0)
-		exit_with_error(logger, "Cannot send Payload for Message: %s, with instruction %d" message, id);
+	{	
+		log_error(logger, "Cannot send Payload for Message: %s, with instruction %d", message, id);
+		exit_with_error(logger, "");
+	}
 }
 
 void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
@@ -219,20 +226,21 @@ void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 			break;
 	}
 
-		switch (buffer->id)
-		{
-			case 31:
-				send_message(scheduler_socket, 22, "", "");
-				destruir_operacion(parsed);
-				break;
-			case 32:
-				bloqueado = true;
-				send_message(scheduler_socket, 23, "", "");
-				break;
-			default:
-				exit_with_error(logger, "Message type not valid: %d", buffer->id);
-		}
-		free(buffer);
+	switch (buffer->id)
+	{
+		case 31:
+			send_message(scheduler_socket, 22, "", "");
+			destruir_operacion(parsed);
+			break;
+		case 32:
+			bloqueado = true;
+			send_message(scheduler_socket, 23, "", "");
+			break;
+		default:
+			log_error(logger, "Message type not valid: %d", buffer->id);
+			exit_with_error(logger, "");
+	}
+	free(buffer);
 	}
 	else
 	{
@@ -250,6 +258,6 @@ t_esi_operacion parse_line() {
 	}
 	else
 	{
-			exit_with_error("unable to read line from script");
+		exit_with_error(logger, "unable to read line from script");
 	}
 }
