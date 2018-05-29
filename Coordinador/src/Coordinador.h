@@ -52,6 +52,7 @@ typedef struct
     int space_used; //para least space used
     int is_active; //para saber si se cayo o no
     sem_t start;
+    t_list* keys;
 } instance_t;
 
 typedef struct

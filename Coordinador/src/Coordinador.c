@@ -26,9 +26,9 @@ int result = 1;
 int main(void) 
 {
 	pthread_mutex_init(&lock, NULL);
-    sem_init(&esi_operation, 1, 0);
-    sem_init(&scheduler_response, 1, 0);
-    sem_init(&result_set, 1, 0);
+    sem_init(&esi_operation, 0, 0);
+    sem_init(&scheduler_response, 0, 0);
+    sem_init(&result_set, 0, 0);
 
     configure_logger();
 
@@ -239,10 +239,18 @@ void host_instance(void* arg)
         header->len = len1;
         header->len2 = len2;
 
+        log_warning(logger, "soy la instancia %s", name);
         send(socket, header, sizeof(content_header), 0);
         
-        send(socket, message, len1 + len2, 0);
+        //serializar message
+        int len_message1 = strlen(message->key);
+        int len_message2 = strlen(message->value);
+        char * message_send = malloc(len_message1 + int len_message2);
+	    memcpy(message_send, message->key, len_message1);
+	    memcpy(message_send + len_message1, message->value, len_message2);
 
+        send(socket, message_send, len1 + len2, 0);
+ 
         if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
             {
                 result = 0;
@@ -252,6 +260,7 @@ void host_instance(void* arg)
         process_message_header(header, socket);
 
         sem_post(&result_set);
+        free(message_send);
     }
 
     free(header);
@@ -272,6 +281,8 @@ void host_esi(void* arg)
     else 
         sprintf(name, "ESI%d", num_esi);
 
+    log_info(logger, "ESI ID: %s", name);
+
     t_dictionary * blocked_keys_by_this_esi = dictionary_create();
 
     int valread;
@@ -279,6 +290,8 @@ void host_esi(void* arg)
 
     while(1)
     {
+        log_warning(logger, "Waiting for Instruccions");
+        
         if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
             disconnect_socket(socket, false);
         
@@ -301,15 +314,17 @@ void host_scheduler(void* arg)
         int key_id;
 
         sem_wait(&esi_operation);
+        
         header->len = strlen(message->key);
         switch(operation)
         {
             case 31: //preguntar por clave
             {
+                log_info(logger, "Checking key with scheduler");
                 header->id = 31;
                 send(socket, header, sizeof(content_header), 0);
-
-                send(socket, message, header->len, 0);
+                
+                send(socket, message->key, header->len, 0);
 
                 recv(socket, header, sizeof(content_header), 0);
 
@@ -438,13 +453,19 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
 
 void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    sleep(delay);
-    
-    message = malloc(sizeof(char) * header->len + 1);
+    usleep(delay);
 
-    recv(socket, message, header->len, 0);
+    message = (message_content*) malloc(header->len + header->len2);
+    char* message_recv = malloc(header->len + header->len2);
+
+    int result = recv(socket, message_recv, header->len + 1, 0);
+    if(result <= 0)
+        perror("Recv:");
+
+    message->key = message_recv;
 
     log_info(logger, "%s requested a GET of key: %s", name, message->key);
+    operation = 31;
     sem_post(&esi_operation);
 
     sem_wait(&scheduler_response);
@@ -459,18 +480,24 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
 
     free(message->key);
     free(message->value);
-    free(message); 
+    free(message);
+    free(message_recv);
 }
 
 void operation_set(content_header * header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    sleep(delay);
+    usleep(delay);
     
-    message = malloc(sizeof(char) * header->len + header->len2);
+    char* message_recv = malloc(header->len + header->len2);
+    message = (message_content*)malloc(sizeof(char) * header->len + header->len2);
 
-    recv(socket, message, header->len + header->len2, 0);
+    recv(socket, message_recv, header->len + header->len2, 0);
 
-    //agregar el nombre del ESI
+    message->key = malloc(header->len);
+    message->value = malloc(header->len2);
+    memcpy(message->key, message_recv, header->len);
+    memcpy(message->value, message_recv + header->len, header->len2);
+
     log_info(logger, "%s requested a SET of Key: %s, with Value: %s", name, message->key, message->value);
 
     if(!dictionary_has_key(blocked_keys, message->key))
@@ -501,7 +528,8 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 
     free(message->key);
     free(message->value);
-    free(message); 
+    free(message);
+    free(message_recv); 
 }
 
 void initiate_compactation()
@@ -556,7 +584,9 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
         {
             chosen_one = find_by_times_used(instances);
         
-            //guardar clave en lista
+            chosen_one->times_used++;
+
+            list_add(chosen_one->keys, message->key);
             
             break;
         }
@@ -669,9 +699,15 @@ instance_t* find_by_key(t_list* lista, char* key)
 {
     bool _is_the_one(instance_t* p) 
     {
-        //revisar lista de claves
-        
-        return string_equals_ignore_case(p->name, key);
+        bool _has_the_key(char* q)
+        {
+            return string_equals_ignore_case(q, key);
+        }
+
+        if(list_find(p->keys, _has_the_key) == NULL)
+            return false;
+        else
+            return true;
     }
 
     return list_find(instances, _is_the_one);
