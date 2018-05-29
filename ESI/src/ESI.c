@@ -172,10 +172,11 @@ void send_message(int socket, int id, char * message1, char * message2)
 	header_c->len2 = len_message2;
 
 	int result = send(socket, header_c, sizeof(content_header), 0);
-	t_message * message = (t_message *) malloc ((len_message1 + len_message2) * sizeof(char)); //PUEDE llegar a romper
-	message->key = message1;
-	message->value = message2;
 	
+	char * message = malloc(len_message1 + len_message2);
+	memcpy(message, message1, len_message1);
+	memcpy(message + len_message1, message2, len_message2);
+
 	free(header_c);
 	
 	if (result <= 0)
@@ -184,8 +185,10 @@ void send_message(int socket, int id, char * message1, char * message2)
 		exit_with_error(logger, "");
 	}
 	if (len_message1 > 0)
+	{	
+		log_warning(logger, "Message sent: %s", message);
 		result = send(socket, message, (len_message1 + len_message2), 0);
-	
+	}
 	if (result <= 0)
 	{	
 		log_error(logger, "Cannot send Payload for Message: %s, with instruction %d", message, id);
@@ -202,6 +205,7 @@ void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 
 		switch(parsed.keyword){
 			case GET:
+				log_warning(logger, "Operation GET");
 				send_message(coordinator_socket, 21, parsed.argumentos.GET.clave, "");
 				break;
 			case SET:
