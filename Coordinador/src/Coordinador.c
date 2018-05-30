@@ -26,6 +26,8 @@ int result = 1;
 int main(void) 
 {
 	pthread_mutex_init(&lock, NULL);
+    sem_init(&one_instance, 0, 0);
+    sem_init(&one_esi, 0, 0);
     sem_init(&esi_operation, 0, 0);
     sem_init(&scheduler_response, 0, 0);
     sem_init(&result_set, 0, 0);
@@ -73,7 +75,7 @@ void get_config_values(t_config* config)
     else
         exit_with_error(logger, "Cannot read Delay from config file");
 
-    config_for_instance = malloc(sizeof(config_instance));
+    config_instance = malloc(sizeof(config_instance_t));
 
     int aux_number;
     if(config_has_property(config, "CantidadEntradas"))
@@ -93,8 +95,8 @@ void get_config_values(t_config* config)
     else
         exit_with_error(logger, "Cannot read Delay from config file");
 
-    config_for_instance->number = aux_number;
-    config_for_instance->size = aux_size;
+    config_instance->number = aux_number;
+    config_instance->size = aux_size;
 }
 
 void create_server()
@@ -224,7 +226,9 @@ void host_instance(void* arg)
 
     instance = add_instance_to_list(name, socket);
 
-    send(socket, config_for_instance, sizeof(config_instance), 0);
+    send(socket, config_instance, sizeof(config_instance_t), 0);
+
+    sem_post(&one_instance);
 
     content_header* header = malloc(sizeof(content_header));
 
@@ -239,13 +243,13 @@ void host_instance(void* arg)
         header->len = len1;
         header->len2 = len2;
 
-        log_warning(logger, "soy la instancia %s", name);
+        log_warning(logger, "Sending Value to Instance: %s", name);
         send(socket, header, sizeof(content_header), 0);
         
         //serializar message
         int len_message1 = strlen(message->key);
         int len_message2 = strlen(message->value);
-        char * message_send = malloc(len_message1 + int len_message2);
+        char * message_send = malloc(len_message1 + len_message2);
 	    memcpy(message_send, message->key, len_message1);
 	    memcpy(message_send + len_message1, message->value, len_message2);
 
@@ -285,13 +289,13 @@ void host_esi(void* arg)
 
     t_dictionary * blocked_keys_by_this_esi = dictionary_create();
 
+    sem_post(&one_esi);
+
     int valread;
     content_header* header = malloc(sizeof(content_header));
 
     while(1)
     {
-        log_warning(logger, "Waiting for Instruccions");
-        
         if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
             disconnect_socket(socket, false);
         
@@ -307,6 +311,10 @@ void host_scheduler(void* arg)
     int socket = data->socket;
     int len = data->next_message_len;
     int valread;
+
+    sem_wait(&one_esi);
+    sem_wait(&one_instance);
+    send_header(socket, 35);
 
     while(1)
     {
@@ -336,14 +344,14 @@ void host_scheduler(void* arg)
             {
                 break;
             }
-            case 33: //abortar esi
+            case 33: //operacion set
             {
                 header->id = 33;
                 send(socket, header, sizeof(content_header), 0);
 
                 break;
             }
-            case 34: //operacion set
+            case 34: //abortar esi
             {
                 header->id = 34;
                 send(socket, header, sizeof(content_header), 0);

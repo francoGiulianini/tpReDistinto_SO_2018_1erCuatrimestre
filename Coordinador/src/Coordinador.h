@@ -59,7 +59,7 @@ typedef struct
 {
     int number;
     int size;
-} __attribute__((packed)) config_instance;
+} __attribute__((packed)) config_instance_t;
 
 typedef struct 
 {
@@ -75,7 +75,9 @@ struct sockaddr_in serverAddress;
 _Client hello_id;
 t_list * instances;
 message_content* message;
-config_instance* config_for_instance;
+config_instance_t* config_instance;
+sem_t one_instance;
+sem_t one_esi;
 sem_t esi_operation;
 sem_t scheduler_response;
 sem_t result_set;
