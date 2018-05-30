@@ -37,7 +37,9 @@ ID headers:(se le envian)(ID+TamañoMensaje)
   
   		-31: coordinador pide chequear clave  
   		-32: coordinador pide desbloquear clave
-  		-33: coordinador pide abortar esi
+  		-33: coordinador no pide nada esi
+		-34: coordinador pide abortar esi
+		-35: coordinador pide iniciar planificacion
 
 * -ESI:
 		
