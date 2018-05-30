@@ -14,25 +14,21 @@
 pthread_t idConsole;
 pthread_t idHostConnections;
 struct sockaddr_in serverAddress;
-int listeningPort;
-int socket_c;
-char* ip_c;
-char* port_c;
 int fin_de_esi = 1;
-int abortar_esi = 1;
 int respuesta_ok = 1;
+int key_blocked = 0;
+int abort_esi = 0;
+int kick_esi = 0;
 
 int main(void)
 {
 	configure_logger();
-    sem_init(&esi_listo, 1, 1);
-    sem_init(&coordinador_listo, 1, 0);
-    sem_init(&coordinador_pregunta, 1, 0);
-    sem_init(&esi_respuesta, 1, 0);
+    sem_init(&esi_executing, 0, 0);
+    sem_init(&coordinador_pregunta, 0, 0);
+    sem_init(&esi_respuesta, 0, 0);
     pthread_mutex_init(&pause_mutex, NULL);
-    cola_ready = queue_create();
+    lista_ready = list_create();
     lista_bloqueados = list_create();
-    block_esi = 0;
 
     config = config_create("Config.cfg");
     if(config == NULL)
@@ -44,7 +40,7 @@ int main(void)
 	
     //aqui se conecta con el coordinador
     socket_c = connect_to_server(ip_c, port_c, "Coordinator");
-    send_hello(socket_c);
+    send_header(socket_c, 30);
 
 	int error = pthread_create(&idConsole, NULL, (void*)Console, NULL);
 	if(error != 0)
@@ -59,29 +55,26 @@ int main(void)
 		log_error(logger, "Couldn't create Server Thread");
 	}
 
-    sem_wait(&coordinador_listo);
+    wait_question(socket_c); //espera que le manden un id 35
 
 	//Codigo del Planificador
 	while (stop != 1)
 	{    
-		sem_wait(&esi_listo);
         pthread_mutex_lock(&pause_mutex);
 
-        if(fin_de_esi)
+        if(fin_de_esi || kick_esi)
         {
-            un_esi = queue_pop(cola_ready);
+            if(kick_esi)
+                send_esi_to_ready(un_esi);
+            else
+                finish_esi(un_esi);
+            un_esi = list_get(lista_ready, 1);
             fin_de_esi = 0;
         }
         
         send_header(un_esi->socket, 21); //ejecutar una instruccion
-        
-        if(abortar_esi)
-        {
-            continue;
-            pthread_mutex_unlock(&pause_mutex);
-        }
 
-        sem_wait(&coordinador_pregunta);
+        wait_question(socket_c);
 
         if(key_blocked)
             send_header(socket_c, 32); //31 clave libre 32 clave bloqueada
@@ -90,10 +83,22 @@ int main(void)
 
         sem_wait(&esi_respuesta);
 
-        if(!respuesta_ok && !block_esi)
+        update_values();
+
+        if(blocked_esi_by_console)
         {
-            block_esi = 0;
-            //bloquear_esi(un_esi);
+            blocked_esi_by_console = 0;
+            sem_post(&esi_executing);
+            pthread_mutex_unlock(&pause_mutex);
+            continue;
+        }
+
+        if(!respuesta_ok)
+        {
+            if(abort_esi) //enviar a cola finalizados
+                finish_esi(un_esi);
+            else //ya se bloqueo en la consulta del coordinador
+                fin_de_esi = 1;
         }
 
         pthread_mutex_unlock(&pause_mutex);
@@ -117,6 +122,11 @@ void get_values_from_config(t_log* logger, t_config* config)
     get_int_value(logger, "PuertoEscucha", &listeningPort, config);
     get_string_value(logger, "PuertoCoordinador", &port_c, config);
     get_string_value(logger, "IPCoordinador", &ip_c, config);
+    char* algorithm_aux;
+    get_string_value(logger, "AlgoritmoPlanificacion", &algorithm_aux, config);
+    algorithm = to_algorithm(algorithm_aux);
+    get_int_value(logger, "EstimacionInicial", &initial_estimation, config);
+    get_int_value(logger, "AlfaPlanificacion", &alpha, config);
 }
 
 void get_int_value(t_log* logger, char* key, int *value, t_config* config)
@@ -312,10 +322,15 @@ void HostConnections()
 
                         new_esi->socket = sd;
                         new_esi->name = name;
+                        new_esi->instructions_counter = 0;
+                        new_esi->cpu_time_estimated = (float)initial_estimation;
                     
-                        //se agrega a la cola de ready
-                        queue_push(cola_ready, new_esi);
+                        calculate_estimation(new_esi);
+
+                        //se agrega a la lista de ready
+                        list_add(lista_ready, new_esi);
                         log_info(logger, "New ESI added to the queue as %s", new_esi->name);
+                        log_info(logger, "Estimation: %f", new_esi->cpu_time_estimated);
                     }
 
                     if(header->id == 22)
@@ -334,30 +349,8 @@ void HostConnections()
                     {
                         fin_de_esi = 1;
                         respuesta_ok = 1;
-                        abortar_esi = 1;
-                        sem_post(&esi_listo);
+                        abort_esi = 1;
                     }
-
-                    if (header->id == 31) //coordinador pregunta por clave bloqueada
-                    {
-                        content_message* message = malloc(header->len + header->len2);
-
-                        recv(socket, message, header->len + header->len2, 0);
-    
-                        check_key(message->key);
-                        sem_post(&coordinador_pregunta);
-                    }
-                    if (header->id == 32) //coordinador pide desbloquear clave
-                    {
-                        content_message* message = malloc(header->len + header->len2);
-
-                        recv(socket, message, header->len + header->len2, 0);
-
-                        unlock_key(message->key);
-                        sem_post(&coordinador_pregunta);
-                    }
-                    if (header->id == 33) //coordinador no pregunta nada (operacion SET)
-                        sem_post(&coordinador_pregunta);
                 }  
             }  
         }
@@ -403,23 +396,182 @@ int connect_to_server(char * ip, char * port, char *server)
 	return server_socket;
 }
 
-void send_hello(int socket) 
-{
-    content_header * header_c = (content_header*) malloc(sizeof(content_header));
-
-    header_c->id=30;
-    header_c->len=0;
-
-	int result = send(socket, header_c, sizeof(content_header), 0);
-	if (result <= 0)
-		exit_with_error(logger, "Cannot send Hello");
-    free(header_c);
-}
-
 void send_header(int socket, int id)
 {
     content_header * header = malloc(sizeof(content_header));
     header->id = id;
     
     send(socket, header, sizeof(content_header), 0);
+}
+
+void wait_question(int socket)
+{
+    content_header* header = malloc(sizeof(content_header));
+
+    recv(socket, header, sizeof(content_header), 0);
+    log_info(logger, "Received header id: %d", header->id);
+
+    if (header->id == 31) //coordinador pregunta por clave bloqueada
+    {
+        char* message = (char*)malloc(header->len);
+
+        recv(socket, message, header->len, 0);
+
+        log_info(logger, "Coordinator asked to check Key: %s", message);
+        check_key(message);
+    }
+    if (header->id == 32) //coordinador pide desbloquear clave
+    {
+        char* message = (char*)malloc(header->len);
+
+        recv(socket, message, header->len, 0);
+
+        log_info(logger, "Coordinator asked to store Key: %s", message);
+        unlock_key(message);
+    }
+    if (header->id == 33); //coordinador no pregunta nada (operacion SET)
+    if (header->id == 34)
+    {
+        abort_esi = 1;
+    }
+    if (header->id = 35)
+    {
+        log_info(logger, "All Connected, Initiating Scheduler");
+    }
+}
+
+void check_key(char * key)
+{
+    clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
+
+	if(a_key == NULL)
+	{
+		log_warning(logger, "Requested Key doesnt exist, Adding Key to list");
+
+        a_key->key = malloc(strlen(key));
+        memcpy(a_key->key, key, strlen(key));
+
+        a_key->cola_esis_bloqueados = queue_create();
+
+        list_add(lista_bloqueados, a_key);
+	}
+    else
+    {
+        log_warning(logger, "Requested Key was taken before, Adding ESI to blocked queue");
+    
+        //block_esi(un_esi, a_key);
+        queue_push(a_key->cola_esis_bloqueados, un_esi);
+    }
+}
+
+void unlock_key(char* key)
+{
+    clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
+
+    t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
+    
+    switch(algorithm)
+    {
+        case SJFSD:
+        {
+            //estimar la rafaga del esi que se libera
+            calculate_estimation(otro_esi);
+
+            log_info(logger, "New Estimation for: %s is: %f", 
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+            list_add(lista_ready, otro_esi);
+            //hay que reordenar la lista de ready
+
+            //sort_list_by_estimation();
+            break;
+        }
+        case SJFCD:
+        {
+            //revisar estimaciones de un_esi y el que se libera
+
+            //si el que se libera es mas chico desalojar = 1
+                //agregar a la lista ready un_esi
+
+            //ordenar lista ready para que el que se libera quede primero
+            break;
+        }
+        case HRRN:
+        {
+            //no hay desalojo pero el esi desbloqueado tiene espera de 0;
+            break;
+        }
+    }
+}
+
+void update_values()
+{
+    if(respuesta_ok)
+        un_esi->instructions_counter += 1;
+
+    switch(algorithm)
+    {
+        case SJFSD:
+        {
+            un_esi->cpu_time_estimated -= 1;
+            break;
+        }
+        case SJFCD:
+        {
+            un_esi->cpu_time_estimated -= 1;
+            break;
+        }
+        case HRRN:
+        {
+            //se agrega tiempo de espera a los de la lista ready
+            //list_map(t_list*, void*(*transformer)(void*));
+            break;
+        }
+    }
+}
+
+void calculate_estimation(t_esi* otro_esi)
+{
+    int i = otro_esi->instructions_counter;
+    int cpu = otro_esi->cpu_time_estimated;
+
+    float alpha_a = (((float)alpha / 100) * i);
+    float alpha_b = (1 - ((float)alpha / 100)) * cpu;
+
+    float nueva_estimacion = (alpha_a + alpha_b);
+
+    otro_esi->cpu_time_estimated = nueva_estimacion;
+}
+
+/*void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key)
+{
+    queue_push(a_key->cola_esis_bloqueados, un_esi);
+}*/
+
+void send_esi_to_ready(t_esi * un_esi)
+{
+    //agregar a lista ready
+
+    //ordenar lista
+
+    kick_esi = 0;
+}
+
+void finish_esi(t_esi * un_esi)
+{
+    //agregar a cola finalizados
+
+    abort_esi = 1;
+}
+
+_Algorithm to_algorithm(char* string)
+{
+    if(string_equals_ignore_case(string, "SJF-SD"))
+        return SJFSD;
+    if(string_equals_ignore_case(string, "SJF-CD"))
+        return SJFCD;
+    if(string_equals_ignore_case(string, "HRRN"))
+        return HRRN;
+    log_warning(logger, "Incorrect algorithm type, using default SJF-SD");
+    return SJFSD;
 }
