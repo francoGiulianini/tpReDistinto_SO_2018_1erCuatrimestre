@@ -94,7 +94,7 @@ void Console(/*void *parameter*/)
 			}
 			case STATUS:
 			{
-				//da informacion de las instancias?
+				//ver enunciado
 				key = consoleReadArg(line, &consoleInputIndex);
 				log_info(logger, "Status information displayed by command");
 				free(key);
@@ -188,16 +188,22 @@ void block_esi_by_console(char * key, char * id)
 	sem_wait(&esi_executing);
 	pthread_mutex_lock(&pause_mutex);
 	//ver si esta ejecutando o en listo
-	t_esi * otro_esi = find_by_id(cola_ready, id);
+	t_esi * otro_esi = find_by_id(lista_ready, id);
 	
 	clave_bloqueada_t* un_key = find_by_key(lista_bloqueados, key);
 
+	//si la clave no existe crearla(ver en planificador.c)
+
 	if(!otro_esi == NULL) //esta en cola listo
+	{	
+		//otro_esi->console_blocked = 1;
 		queue_push(un_key->cola_esis_bloqueados, otro_esi);
+	}	
 	else	//esta en ejecucion
 	{
 		queue_push(un_key->cola_esis_bloqueados, un_esi);
 		blocked_esi_by_console = 1;
+		fin_de_esi = 1;
 	}
 
 	list_add(lista_bloqueados, un_key);
@@ -222,13 +228,22 @@ void list_blocked_esis(char* resource)
 	list_iterate(a_key->cola_esis_bloqueados, _log_all_esis);
 }
 
-t_esi * find_by_id(t_queue * cola, char* id)
+t_esi * find_by_id(t_list * lista, char* id)
 {
-	//usar queue_size para sacar todos los elemento
-	//menos el que necesito
+	bool _is_this_one(t_esi* p)
+	{
+		return string_equals_ignore_case(p->name, id);
+	}
+
+	list_find(lista, _is_this_one);
 }
 
 clave_bloqueada_t * find_by_key(t_list * lista, char* key)
 {
+	bool _is_this_the_one(clave_bloqueada_t* p)
+	{
+		return string_equals_ignore_case(p->key, key);
+	}
 
+	list_find(lista, _is_this_the_one);
 }
