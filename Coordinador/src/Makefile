@@ -1,7 +1,8 @@
-FLAGS = -lcommons -pthread
+CFLAGS = -lcommons -pthread
+
+%: %.o
+	cc -o $(*F) $(*F).o $(CFLAGS)
 
 Coordinador: Coordinador.o
-	$(CC) -o Coordinador Coordinador.o
 
 Coordinador.o: Coordinador.h
-	$(CC) -o Coordinador.o Coordinador.c $(FLAGS)

@@ -1,9 +1,8 @@
-FLAGS = -lcommons -pthread -lreadline
+CFLAGS =  -lcommons -pthread -lreadline
 
-Planificador: Consola.o
+Planificador: Planificador.o Consola.o
+	$(CC) Planificador.o Consola.o -o Planificador $(CFLAGS)
 
 Planificador.o: Planificador.h
-	$(CC) -o Planificador.o Planificador.c $(FLAGS)
 
 Consola.o: Consola.h
-	$(CC) -o Consola.o Consola.c $(FLAGS)

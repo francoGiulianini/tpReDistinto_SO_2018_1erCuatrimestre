@@ -1,13 +1,21 @@
 CC = gcc
 MAKE = make
-SUBDIRS = Coordinador/src ESI/src Instancia/src Planificador/src
+CARPETAS = ESI Instancia Planificador Coordinador
 
-.PHONY = subdirs $(SUBDIRS) clean
+.PHONY = all $(CARPETAS) cleanObj cleanAll
 
-subdirs: $(SUBDIRS)
+all:
+	make -C ESI/src/; \
+	make -C Planificador/src/; \
+	make -C Coordinador/src/; \
+	make -C Instancia/src/
 
-$(SUBDIRS):
-	$(MAKE) -C $@
+cleanObj:
+	for dir in $(CARPETAS); do \
+	rm -f $$dir/src/*.o; \
+	done
 
-clean:
-	-rm -f Coordinador/src/*.o ESI/src/*.o Instancia/src/*.o Planificador/src/*.o
+cleanAll: cleanObj
+	for dir in $(CARPETAS); do \
+	rm -f $$dir/src/$$dir; \
+	done

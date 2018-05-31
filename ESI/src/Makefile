@@ -1,5 +1,8 @@
+CFLAGS = -lcommons -lparsi
+
+%: %.o
+	$(CC) -o $(*F) $(*F).o $(CFLAGS)
+
 ESI: ESI.o
-	$(CC) -o ESI ESI.o
 
 ESI.o: ESI.h
-	$(CC) -o ESI.o ESI.c
