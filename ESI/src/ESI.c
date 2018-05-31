@@ -215,43 +215,57 @@ void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 				send_message(coordinator_socket, 23, parsed.argumentos.STORE.clave, "");
 				break;
 			default:
+				send_message(scheduler_socket, 24, "", "");
 				exit_with_error(logger, "unable to interprete line from script");
 		}
 
-	result = recv(coordinator_socket, buffer, sizeof(content_header), 0);
-	switch (result){
-		case -1:
-			exit_with_error(logger, "Cannot receive expected answer from Coordinator");
-			break;
-		case 0:
-			exit_with_error(logger, "Coordinator Disconnected");
-			break;
-		default:
-			break;
-	}
+		result = recv(coordinator_socket, buffer, sizeof(content_header), 0);
 
-	switch (buffer->id)
-	{
-		case 31:
-			send_message(scheduler_socket, 22, "", "");
-			destruir_operacion(parsed);
-			break;
-		case 32:
-			bloqueado = true;
-			send_message(scheduler_socket, 23, "", "");
-			break;
-		default:
-			log_error(logger, "Message type not valid: %d", buffer->id);
-			exit_with_error(logger, "");
-	}
-	free(buffer);
+		switch (result){
+			case -1:
+				send_message(scheduler_socket, 24, "", "");
+				exit_with_error(logger, "Cannot receive expected answer from Coordinator");
+				break;
+			case 0:
+				send_message(scheduler_socket, 24, "", "");
+				exit_with_error(logger, "Coordinator Disconnected");
+				break;
+			default:
+				break;
+		}
+
+		switch (buffer->id)
+		{
+			case 23:
+			if(!feof(script))
+			{
+				bloqueado = false;
+				send_message(scheduler_socket, 22, "", "");
+				destruir_operacion(parsed);
+			}
+			else
+			{
+				send_message(scheduler_socket, 24, "", "");
+				exit(EXIT_SUCCESS);
+			}
+				break;
+			case 22:
+				bloqueado = true;
+				send_message(scheduler_socket, 23, "", "");
+				break;
+			default:
+				log_error(logger, "Message type not valid: %d", buffer->id);
+				send_message(scheduler_socket, 24, "", "");
+				exit_with_error(logger, "");
+		}
 	}
 	else
 	{
+		send_message(scheduler_socket, 24, "", "");
 		exit_with_error(logger, "line from script is not valid");
 	}
 
-	if(feof(script)) exit(EXIT_SUCCESS);
+	free(buffer);
 }
 
 t_esi_operacion parse_line() {
