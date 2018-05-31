@@ -29,6 +29,7 @@ int main(void)
     pthread_mutex_init(&pause_mutex, NULL);
     lista_ready = list_create();
     lista_bloqueados = list_create();
+    claves_bloqueadas_por_esis = dictionary_create();
 
     config = config_create("Config.cfg");
     if(config == NULL)
@@ -443,6 +444,8 @@ void wait_question(int socket)
 void check_key(char * key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
+    int key_len = strlen(key);
+    int id_len = strlen(un_esi->name);
 
 	if(a_key == NULL)
 	{
@@ -454,6 +457,14 @@ void check_key(char * key)
         a_key->cola_esis_bloqueados = queue_create();
 
         list_add(lista_bloqueados, a_key);
+
+        clave_bloqueada_por_esi_t* nueva_clave;
+        nueva_clave->esi_id = malloc(id_len);
+        memcpy(nueva_clave->esi_id, un_esi->name, id_len);
+        nueva_clave->key = malloc(key_len);
+        memcpy(nueva_clave->key, key, key_len);
+
+        list_add(claves_bloqueadas_por_esis, nueva_clave);
 	}
     else
     {

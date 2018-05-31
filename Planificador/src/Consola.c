@@ -188,7 +188,7 @@ void block_esi_by_console(char * key, char * id)
 	sem_wait(&esi_executing);
 	pthread_mutex_lock(&pause_mutex);
 	//ver si esta ejecutando o en listo
-	t_esi * otro_esi = find_by_id(lista_ready, id);
+	t_esi * otro_esi = find_and_remove_by_id(lista_ready, id);
 	
 	clave_bloqueada_t* un_key = find_by_key(lista_bloqueados, key);
 
@@ -235,7 +235,17 @@ t_esi * find_by_id(t_list * lista, char* id)
 		return string_equals_ignore_case(p->name, id);
 	}
 
-	list_find(lista, _is_this_one);
+	return list_find(lista, _is_this_one);
+}
+
+t_esi * find_and_remove_by_id(t_list * lista, char* id)
+{
+	bool _is_this_one(t_esi* p)
+	{
+		return string_equals_ignore_case(p->name, id);
+	}
+
+	return list_remove_by_condition(lista, _is_this_one);
 }
 
 clave_bloqueada_t * find_by_key(t_list * lista, char* key)
@@ -245,5 +255,5 @@ clave_bloqueada_t * find_by_key(t_list * lista, char* key)
 		return string_equals_ignore_case(p->key, key);
 	}
 
-	list_find(lista, _is_this_the_one);
+	return list_find(lista, _is_this_the_one);
 }
