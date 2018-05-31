@@ -46,7 +46,13 @@ typedef struct
 {
     t_queue * cola_esis_bloqueados;
     char* key;
-} clave_bloqueada_t;
+} clave_bloqueada_t; //estructura para desbloquear esis y comando LIST
+
+typedef struct
+{
+    char* esi_id;
+    char* key;
+} clave_bloqueada_por_esi_t; //usar esta estructura para deadlock
 
 int stop; //variables globales
 t_log * logger;
@@ -61,6 +67,7 @@ char* port_c;
 t_esi* un_esi;
 t_list * lista_ready; //para no marear lo pongo en español
 t_list * lista_bloqueados;
+t_list * claves_bloqueadas_por_esis;
 pthread_mutex_t pause_mutex;
 sem_t esi_executing;
 sem_t coordinador_pregunta;
