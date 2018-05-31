@@ -25,6 +25,10 @@
 #include <errno.h>
 #include <arpa/inet.h>
 
+#define GET 31
+#define SET 33
+#define STATUS 39
+
 typedef enum _Clients {INSTANCE, ESI, SCHEDULER} _Client;
 typedef enum _Algorithms {EL, LRU, KE} _Algorithm;
 
@@ -48,7 +52,6 @@ typedef struct
 {
     char* name;
     int socket;
-    int times_used; //para equitative load
     int space_used; //para least space used
     int is_active; //para saber si se cayo o no
     sem_t start;
@@ -76,10 +79,12 @@ _Client hello_id;
 t_list * instances;
 message_content* message;
 config_instance_t* config_instance;
+int instance_operation;
 sem_t one_instance;
 sem_t one_esi;
 sem_t esi_operation;
 sem_t scheduler_response;
+sem_t result_get;
 sem_t result_set;
 
 void configure_logger();
@@ -105,7 +110,8 @@ instance_t* add_instance_to_list(char* name, int socket);
 void disconnect_instance_in_list(int socket);
 instance_t* name_is_equal(t_list* lista, char* name);
 instance_t* socket_is_equal(t_list* lista, int socket);
-instance_t* find_by_times_used(t_list* lista);
+instance_t* find_by_space_used(t_list* lista);
+instance_t* choose_by_counter(t_list* lista);
 instance_t* find_by_key(t_list* lista, char* key);
 _Algorithm to_algorithm(char* string);
 
