@@ -45,10 +45,12 @@ ID headers:(se le envian)(ID+TamañoMensaje)
 		
 		-21: planificador pide ejecutar una sentencia
 		-22: coordinador dice que la clave esta bloqueada
-		-23: coordinador dice que la clave no esta bloqueada
-		-24: operacion exitosa(GET, SET o STORE)
+		-23: operacion exitosa(GET, SET o STORE)
+		-24: coordinador dice que te abortes
 		
 * -Instancia:
 
 		-11: coordinador pide compactar
 		-12: coordinador pide SET
+		-13: coordinador pide GET
+		-14: coordinador pide STATUS
