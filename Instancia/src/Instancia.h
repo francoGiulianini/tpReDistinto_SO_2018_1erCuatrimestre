@@ -31,6 +31,12 @@ typedef struct
     int tamanioEntradas;
 }__attribute__((packed)) configuracion_t;
 
+typedef struct
+{
+    char clave[40];
+    int tamanio;
+} entrada_t
+
 t_log * logger;
 t_config * config;
 configuracion_t cofiguracion;
