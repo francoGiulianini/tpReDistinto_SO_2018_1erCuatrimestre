@@ -23,23 +23,26 @@ int main(void)
     if(config == NULL)
         exit_with_error(logger, "Cannot open config file");
     get_values_from_config(logger, config);
-	int coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
+	coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
 	send_hello(coordinator_socket);
 	
-	recibirTamanos();
+	send(coordinator_socket, name, strlen (name), 0);
+	
+	recibirTamanos();	
 
-	send(coordinator_socket, name, strlen (name), 0);	
+	entrada_t tabla[configuracion->cantEntradas];
 
-	entradas_t tabla[configuracion.cantEntradas];
-
-	char* mem = malloc(sizeof (char) *configuracion.cantEntradas*configuracion.tamanioEntradas);
+	char* mem = malloc(sizeof (char) *configuracion->cantEntradas*configuracion->tamanioEntradas);
 	while(1)
 	{
-	content_header *header = malloc (sizeof (content_header));
+		content_header *header = malloc (sizeof (content_header));
 
-	recv(coordinator_socket, header, sizeof (content_header), 0);
-	procesarHeader (header);
-	
+		recv(coordinator_socket, header, sizeof (content_header), 0);
+		procesarHeader (header, &tabla, &mem);
+
+		free(header->lenClave);
+		free(header->lenValor);
+		free(header);
 	}
 	return EXIT_SUCCESS;
 }
@@ -131,7 +134,7 @@ void  send_hello(int socket)
 	content_header * header_c = (content_header *) malloc (sizeof(content_header));
 	
 	header_c->id=10;
-	header_c->len=strlen(name);
+	header_c->lenClave=strlen(name);
 
 	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
@@ -139,31 +142,36 @@ void  send_hello(int socket)
 }
 void recibirTamanos ()
 {
-	configuracion = malloc(sizeof(configuracion_t));
+	configuracion = (configuracion_t*)malloc(sizeof(configuracion_t));
 
-	recv
+	recv(coordinator_socket, configuracion, sizeof(configuracion), 0);
 }
 
 
 // funciones auxiliares, ignorelas
 
-int lenEnBloques (lenMensaje)
+/*int lenEnBloques (lenMensaje)
 float aux = lenMensaje / lenBloqueDeMem
 if (aux / 
+*/
 
-
-int consultarTabla (entrada_t tabla, content mensaje, int tamanioMensaje){
+int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
 
 	int cantPaginas = 0;
-	if (tamanioMensaje % configuracion.tamanioEntradas == 0){
-		cantPaginas = tamanioMensaje div confiuracion.tamanioEntradas
+	int lugarVacio = 0;
+
+	//deberia fijarse si la clave ya existe en la tabla
+	//y devolver esa posicion
+
+	if (tamanioMensaje % configuracion->tamanioEntradas == 0){
+		cantPaginas = tamanioMensaje / configuracion->tamanioEntradas;
 	} else{
-		cantPaginas = (tamanioMensaje div confiuracion.tamanioEntradas) + 1;
+		cantPaginas = (tamanioMensaje / configuracion->tamanioEntradas) + 1;
 	}
-	for (int i = 0; i <= configuracion.cantEntradas; i++){
-		if (int lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio")){
+	for (int i = 0; i <= configuracion->cantEntradas; i++){
+		if (lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio")){
 			for (int j = i; j < i + cantPaginas; j++){
-				lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio")
+				lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio");
 			}
 			if (lugarVacio) {return i;}
 		}
@@ -172,28 +180,32 @@ int consultarTabla (entrada_t tabla, content mensaje, int tamanioMensaje){
 
 }
 
-void guardarEnTabla (entrada_t tabla,content mensaje, int posicion){
+void guardarEnTabla (entrada_t* tabla,content* mensaje, int posicion){
 
 	int cantPaginas = 0;
-	if (tamanioMensaje % configuracion.tamanioEntradas == 0){
-		cantPaginas = tamanioMensaje div confiuracion.tamanioEntradas
+	int tamanioMensaje = strlen(mensaje->clave);
+	if (tamanioMensaje % configuracion->tamanioEntradas == 0){
+		cantPaginas = tamanioMensaje / configuracion->tamanioEntradas;
 	} else{
-		cantPaginas = (tamanioMensaje div confiuracion.tamanioEntradas) + 1;
+		cantPaginas = (tamanioMensaje / configuracion->tamanioEntradas) + 1;
 	}
-	for (i = posicion; i <= cantPaginas; i++){
-		memcpy (tabla[i].clave , mensaje.clave , strlen(mensaje.clave));
+	for (int i = posicion; i <= cantPaginas; i++){
+		memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));
+		//guardar en tabla el tamaño del valor
 	}
+	//actualizar archivo de clave?
 }
 
 
-void guardarEnMem (char* mem, content mensaje, int posicion){
-	int ubicacionEnMem = posicion * configuracion.tamanioEntradas;
-	memcpy (mem + ubicacionEnMem , mensaje.valor , strlen(mensaje.valor));
+void guardarEnMem (char* mem, content* mensaje, int posicion){
+	int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
+	memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor));
+	//actualizar archivo de clave?
 }
 
 
-void procesarHeader (content_header header){
-	switch header->id{
+void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
+	switch (header->id){
 		case 11 : {
 			// compactar
 		}
@@ -206,26 +218,25 @@ void procesarHeader (content_header header){
 			int posicion = consultarTabla (tabla, mensaje, header->lenValor);
 
 			if (noHayLugar){
+				//no se puede enviar enteros, ver como envia el coordinador
 				send(coordinator_socket, 11, sizeof(int), 0); //hay que compactar
 
 				//activar semaforo 
 
-				int posicion = consultarTabla (mensaje);
+				int posicion = consultarTabla (mensaje, tabla, strlen(mensaje->valor));
 
 			}
 
-			guardarEnTabla (tabla,mensaje,posicion);
-			guardarEnMem (mem,mensaje,posicion);
+			guardarEnTabla (&tabla,mensaje,posicion);
+			guardarEnMem (&mem,mensaje,posicion);
 
-
+			//no se puede enviar enteros, ver como envia el coordinador
 			send(coordinator_socket, 12, sizeof(int), 0);
 
-			free(header->lenClave);
-			free(header->lenValor);
-			free(header);
 			free(mensaje);
 		}
 		case 13:{ //GET
+			//crear archivo con la clave que tenga la posicion en la tabla y el valor
 			//ver mmap
 		}
 	}
