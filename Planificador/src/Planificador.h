@@ -69,6 +69,8 @@ t_list * lista_ready; //para no marear lo pongo en español
 t_list * lista_bloqueados;
 t_list * claves_bloqueadas_por_esis;
 pthread_mutex_t pause_mutex;
+pthread_mutex_t new_esi;
+sem_t hay_esis;
 sem_t esi_executing;
 sem_t coordinador_pregunta;
 sem_t esi_respuesta;
@@ -83,6 +85,7 @@ void HostConnections(/*void * parameter*/);
 int connect_to_server(char * ip, char * port, char *server); //shared library
 void send_header(int socket, int id); //shared library
 void wait_question(int socket);
+void wait_start(int socket);
 void check_key(char* key);
 void unlock_key(char* key);
 void update_values();

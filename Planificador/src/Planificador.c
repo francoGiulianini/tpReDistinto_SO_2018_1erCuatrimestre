@@ -14,7 +14,7 @@
 pthread_t idConsole;
 pthread_t idHostConnections;
 struct sockaddr_in serverAddress;
-int fin_de_esi = 1;
+int fin_de_esi = 0;
 int respuesta_ok = 1;
 int key_blocked = 0;
 int abort_esi = 0;
@@ -23,13 +23,15 @@ int kick_esi = 0;
 int main(void)
 {
 	configure_logger();
+    sem_init(&hay_esis, 0, 0);
     sem_init(&esi_executing, 0, 0);
     sem_init(&coordinador_pregunta, 0, 0);
     sem_init(&esi_respuesta, 0, 0);
     pthread_mutex_init(&pause_mutex, NULL);
+    pthread_mutex_init(&new_esi, NULL);
     lista_ready = list_create();
     lista_bloqueados = list_create();
-    claves_bloqueadas_por_esis = dictionary_create();
+    claves_bloqueadas_por_esis = list_create();
 
     config = config_create("Config.cfg");
     if(config == NULL)
@@ -56,8 +58,14 @@ int main(void)
 		log_error(logger, "Couldn't create Server Thread");
 	}
 
-    wait_question(socket_c); //espera que le manden un id 35
+    sem_wait(&hay_esis);
+    wait_start(socket_c); //espera que le manden un id 35
 
+    un_esi = malloc(sizeof(t_esi));
+    pthread_mutex_lock(&new_esi);
+    un_esi = list_remove(lista_ready, 0);
+    pthread_mutex_unlock(&new_esi);
+    log_warning(logger, "%s Chosen to Start", un_esi->name);
 	//Codigo del Planificador
 	while (stop != 1)
 	{    
@@ -68,8 +76,9 @@ int main(void)
             if(kick_esi)
                 send_esi_to_ready(un_esi);
             else
-                finish_esi(un_esi);
-            un_esi = list_get(lista_ready, 1);
+                finish_esi(un_esi);//pregunta si se bloqueo o finalizo o recien empieza
+            sem_wait(&hay_esis);
+            un_esi = list_remove(lista_ready, 0);
             fin_de_esi = 0;
         }
         
@@ -312,7 +321,8 @@ void HostConnections()
                     if(header->id == 20)
                     {
                         //creamos la estructura del esi
-                        t_esi * new_esi = malloc(sizeof(t_esi));
+                        pthread_mutex_lock(&new_esi);
+                        t_esi * a_new_esi = malloc(sizeof(t_esi));
                         num_esi++;
 
                         char* name = (char*)malloc(7);
@@ -321,17 +331,19 @@ void HostConnections()
                         else 
                             sprintf(name, "ESI%d", num_esi);
 
-                        new_esi->socket = sd;
-                        new_esi->name = name;
-                        new_esi->instructions_counter = 0;
-                        new_esi->cpu_time_estimated = (float)initial_estimation;
+                        a_new_esi->socket = sd;
+                        a_new_esi->name = name;
+                        a_new_esi->instructions_counter = 0;
+                        a_new_esi->cpu_time_estimated = (float)initial_estimation;
                     
-                        calculate_estimation(new_esi);
+                        calculate_estimation(a_new_esi);
 
                         //se agrega a la lista de ready
-                        list_add(lista_ready, new_esi);
-                        log_info(logger, "New ESI added to the queue as %s", new_esi->name);
-                        log_info(logger, "Estimation: %f", new_esi->cpu_time_estimated);
+                        list_add(lista_ready, a_new_esi);
+                        pthread_mutex_unlock(&new_esi);                       
+                        log_info(logger, "New ESI added to the queue as %s", a_new_esi->name);
+                        log_info(logger, "Estimation: %f", a_new_esi->cpu_time_estimated);
+                        sem_post(&hay_esis);
                     }
 
                     if(header->id == 22)
@@ -431,10 +443,28 @@ void wait_question(int socket)
         unlock_key(message);
     }
     if (header->id == 33); //coordinador no pregunta nada (operacion SET)
+                            //podria ser lo mismo que el 31 si es que hay que chequar la clave
     if (header->id == 34)
     {
         abort_esi = 1;
     }
+    if (header->id = 35)
+    {
+        log_info(logger, "All Connected, Initiating Scheduler");
+    }
+
+    free(header->id);
+    free(header->len);
+    free(header->len2);
+    free(header);
+}
+
+void wait_start(int socket)
+{
+    content_header* header = malloc(sizeof(content_header));
+
+    recv(socket, header, sizeof(content_header), 0);
+
     if (header->id = 35)
     {
         log_info(logger, "All Connected, Initiating Scheduler");
@@ -444,21 +474,19 @@ void wait_question(int socket)
 void check_key(char * key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
-    int key_len = strlen(key);
+    int key_len = strlen(key) + 1;
     int id_len = strlen(un_esi->name);
 
 	if(a_key == NULL)
 	{
 		log_warning(logger, "Requested Key doesnt exist, Adding Key to list");
-
-        a_key->key = malloc(strlen(key));
-        memcpy(a_key->key, key, strlen(key));
-
+        a_key = malloc(sizeof(clave_bloqueada_t));
+        a_key->key = key;
         a_key->cola_esis_bloqueados = queue_create();
 
         list_add(lista_bloqueados, a_key);
 
-        clave_bloqueada_por_esi_t* nueva_clave;
+        clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
         nueva_clave->esi_id = malloc(id_len);
         memcpy(nueva_clave->esi_id, un_esi->name, id_len);
         nueva_clave->key = malloc(key_len);
