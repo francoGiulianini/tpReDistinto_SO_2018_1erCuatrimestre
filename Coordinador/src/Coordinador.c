@@ -242,7 +242,7 @@ void host_instance(void* arg)
         switch(instance_operation)
         {
             case GET:
-                //preguntar si la instancia sigue viva               
+            {    //preguntar si la instancia sigue viva               
                 header->id = 13;
 
                 send(socket, header, sizeof(content_header), 0);
@@ -258,25 +258,25 @@ void host_instance(void* arg)
 
                 sem_post(&result_get);
                 break;
+            }
             case SET:
-                int len1 = strlen(message->key);
-                int len2 = strlen(message->value);
+            {
+                int length1 = strlen(message->key);
+                int length2 = strlen(message->value);
 
                 header->id = 12;
-                header->len = len1;
-                header->len2 = len2;
+                header->len = length1;
+                header->len2 = length2;
 
                 log_warning(logger, "Sending Value to Instance: %s", name);
                 send(socket, header, sizeof(content_header), 0);
                 
                 //serializar message
-                int len_message1 = strlen(message->key);
-                int len_message2 = strlen(message->value);
-                char * message_send = malloc(len_message1 + len_message2);
-                memcpy(message_send, message->key, len_message1);
-                memcpy(message_send + len_message1, message->value, len_message2);
+                char * message_send = malloc(length1 + length2);
+                memcpy(message_send, message->key, length1);
+                memcpy(message_send + length1, message->value, length2);
 
-                send(socket, message_send, len1 + len2, 0);
+                send(socket, message_send, length1 + length2, 0);
 
                 if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
                     disconnect_socket(socket, true);
@@ -286,6 +286,7 @@ void host_instance(void* arg)
                 sem_post(&result_set);
                 free(message_send);
                 break;
+            }
             case STATUS:
                 break;
         }
@@ -618,27 +619,35 @@ void send_header(int socket, int id)
 
 void assign_instance(_Algorithm algorithm, t_list* instances)
 {
-    instance_t* chosen_one;
+    instance_t* chosen_one = malloc(sizeof(instance_t));
 
     chosen_one = find_by_key(instances, message->key);
     
-    if ((chosen_one != NULL) || (chosen_one->is_active)) //si me devuelve un elemento es porque ya se pidio antes
+    if (chosen_one != NULL) //si me devuelve un elemento es porque ya se pidio antes
     {    
-        sem_post(&chosen_one->start);
-        
-        sem_wait(&result_get);
-        if(just_disconnected == 0)
-            return;
+        if(chosen_one->is_active)
+        {
+            sem_post(&chosen_one->start);
+            
+            sem_wait(&result_get);
+            if(just_disconnected == 0)
+                return;
+        }
     }
 
     switch(algorithm)
     {
         case EL:
         {
+            chosen_one = malloc(sizeof(instance_t));
             chosen_one = choose_by_counter(instances);
 
-            list_add(chosen_one->keys, message->key);
+            log_warning(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
+            dictionary_put(chosen_one->keys, message->key, NULL);
             
+            sem_post(&chosen_one->start);          
+            sem_wait(&result_get);
+
             break;
         }
     }
@@ -675,6 +684,7 @@ instance_t* add_instance_to_list(char* name, int socket)
         inst_aux = (instance_t*)malloc(sizeof(instance_t)); 
         inst_aux->name = name;
         inst_aux->space_used = 0;
+        inst_aux->keys = dictionary_create();
         log_info(logger, "New Instance added to list");
     }
 
@@ -739,7 +749,6 @@ instance_t* find_by_space_used(t_list* lista)
         else
             return false;
     }
-    t_list* list_aux;
 
     list_aux = list_filter(lista, _is_active);
     list_sort(list_aux, _lower_than_the_next);
@@ -768,15 +777,7 @@ instance_t* find_by_key(t_list* lista, char* key)
 {
     bool _is_the_one(instance_t* p) 
     {
-        bool _has_the_key(char* q)
-        {
-            return string_equals_ignore_case(q, key);
-        }
-
-        if(list_find(p->keys, _has_the_key) == NULL)
-            return false;
-        else
-            return true;
+        dictionary_has_key(p->keys, key);
     }
 
     return list_find(instances, _is_the_one);
