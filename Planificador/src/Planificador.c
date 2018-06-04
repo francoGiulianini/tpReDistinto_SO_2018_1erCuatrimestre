@@ -86,11 +86,6 @@ int main(void)
 
         wait_question(socket_c);
 
-        if(key_blocked)
-            send_header(socket_c, 32); //31 clave libre 32 clave bloqueada
-        else
-            send_header(socket_c, 31);
-
         sem_wait(&esi_respuesta);
 
         update_values();
@@ -442,13 +437,15 @@ void wait_question(int socket)
         log_info(logger, "Coordinator asked to store Key: %s", message);
         unlock_key(message);
     }
-    if (header->id == 33); //coordinador no pregunta nada (operacion SET)
-                            //podria ser lo mismo que el 31 si es que hay que chequar la clave
+    if (header->id == 33) //coordinador no pregunta nada (operacion SET)
+    {
+        log_info(logger, "Coordinator asked to set a key");
+    }                        
     if (header->id == 34)
     {
         abort_esi = 1;
     }
-    if (header->id = 35)
+    if (header->id == 35)
     {
         log_info(logger, "All Connected, Initiating Scheduler");
     }
@@ -480,6 +477,7 @@ void check_key(char * key)
 	if(a_key == NULL)
 	{
 		log_warning(logger, "Requested Key doesnt exist, Adding Key to list");
+        
         a_key = malloc(sizeof(clave_bloqueada_t));
         a_key->key = key;
         a_key->cola_esis_bloqueados = queue_create();
@@ -493,11 +491,19 @@ void check_key(char * key)
         memcpy(nueva_clave->key, key, key_len);
 
         list_add(claves_bloqueadas_por_esis, nueva_clave);
+
+        send_header(socket_c, 31); //31 clave libre
 	}
     else
     {
+        if(queue_is_empty(a_key->cola_esis_bloqueados))
+        {
+            send_header(socket_c, 31); //31 clave libre
+            return;
+        }
         log_warning(logger, "Requested Key was taken before, Adding ESI to blocked queue");
-    
+
+        send_header(socket_c, 32); //32 clave bloqueada
         //block_esi(un_esi, a_key);
         queue_push(a_key->cola_esis_bloqueados, un_esi);
     }
@@ -507,6 +513,8 @@ void unlock_key(char* key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
 
+    if(queue_is_empty(a_key->cola_esis_bloqueados))
+        return;
     t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
     
     switch(algorithm)
