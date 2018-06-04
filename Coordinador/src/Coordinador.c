@@ -13,7 +13,7 @@
 t_config* config;
 pthread_mutex_t lock;
 int error;
-int operation;
+_Operation operation;
 fd_set read_fds;
 int master_socket, new_socket;
 int addrlen = sizeof(serverAddress);
@@ -239,11 +239,11 @@ void host_instance(void* arg)
     {
         sem_wait(&instance->start);
 
-        switch(instance_operation)
+        switch(operation)
         {
             case GET:
             {    //preguntar si la instancia sigue viva               
-                header->id = 13;
+                /*header->id = 13;
 
                 send(socket, header, sizeof(content_header), 0);
 
@@ -254,14 +254,16 @@ void host_instance(void* arg)
                     just_disconnected = 1;
                 }
                 else
-                    just_disconnected = 0;
+                    just_disconnected = 0;*/
+
+                log_info(logger, "Instancia hace GET");
 
                 sem_post(&result_get);
                 break;
             }
             case SET:
             {
-                int length1 = strlen(message->key);
+                /*int length1 = strlen(message->key);
                 int length2 = strlen(message->value);
 
                 header->id = 12;
@@ -282,17 +284,23 @@ void host_instance(void* arg)
                     disconnect_socket(socket, true);
 
                 process_message_header(header, socket);
+                //free(message_send);*/
+
+                log_info(logger, "Instancia hace SET");
 
                 sem_post(&result_set);
-                free(message_send);
                 break;
             }
             case STATUS:
                 break;
+            default:
+            {
+                log_error(logger, "Oops...");
+            }    
         }
     }
 
-    free(header);
+    //free(header);
 }
 
 void host_esi(void* arg)
@@ -327,7 +335,7 @@ void host_esi(void* arg)
         process_message_header_esi(header, socket, blocked_keys_by_this_esi, name);
     }
 
-    free(header);
+    //free(header);
 }
 
 void host_scheduler(void* arg)
@@ -348,20 +356,21 @@ void host_scheduler(void* arg)
 
         //for STATUS operation
         recv(socket, header, sizeof(content_header), MSG_DONTWAIT);
-        if(header->id == STATUS)
+        if(header->id == 39)
         {
             //abrir hilo para status o hacerlo aca
         }
 
         sem_wait(&esi_operation);
-        
+
         header->len = strlen(message->key);
         switch(operation)
         {
             case GET: //preguntar por clave
             {
                 log_info(logger, "Checking key with scheduler");
-                header->id = GET;
+                header->id = 31;
+                header->len2 = 0;
                 send(socket, header, sizeof(content_header), 0);
                 
                 send(socket, message->key, header->len, 0);
@@ -372,30 +381,41 @@ void host_scheduler(void* arg)
                 sem_post(&scheduler_response);
                 break;
             }
-            case 32: //desbloquear clave
+            case STORE: //desbloquear clave
             {
+                log_info(logger, "Unlocking key with scheduler");
+                header->id = 32;
+                header->len2 = 0;
+                send(socket, header, sizeof(content_header), 0);
+
+                send(socket, message->key, header->len, 0);
+
+                sem_post(&scheduler_response);
                 break;
             }
             case SET: //operacion set
             {
-                header->id = SET;
+                header->id = 33;
+                header->len2 = 0;
                 send(socket, header, sizeof(content_header), 0);
 
                 break;
             }
-            case 34: //abortar esi
+            case ABORT: //abortar esi
             {
                 header->id = 34;
+                header->len = 0;
+                header->len2 = 0;
                 send(socket, header, sizeof(content_header), 0);
 
                 break;
             }
         }
 
-        free(header->id);
-        free(header->len);
-        free(header->len2);
-        free(header);
+        ////free(header->id);
+        ////free(header->len);
+        ////free(header->len2);
+        ////free(header);
     }
 }
 
@@ -403,11 +423,11 @@ void disconnect_socket(int socket, bool is_instance)
 {
     //disconnected , get his details and print   
     if(is_instance)
-        {
-            pthread_mutex_lock(&lock);
-            disconnect_instance_in_list(socket);
-            pthread_mutex_unlock(&lock);
-        }
+    {
+        pthread_mutex_lock(&lock);
+        disconnect_instance_in_list(socket);
+        pthread_mutex_unlock(&lock);
+    }
     
     getpeername(socket , (struct sockaddr*)&serverAddress , (socklen_t*)&addrlen);  
     log_info(logger, "Host disconnected , ip %s , port %d", 
@@ -476,6 +496,8 @@ void process_message_header(content_header* header, int socket)
 
 void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
+    usleep(delay);
+
     switch(header->id)
     {
         case 21: //ESI pide un GET
@@ -492,6 +514,9 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
         }
         case 23: //ESI pide un STORE
         {
+            operation_store(header, socket, blocked_keys, name);
+            log_info(logger, "Instancia hace STORE");
+
             break;
         }
     }
@@ -499,8 +524,6 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
 
 void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    usleep(delay);
-
     message = (message_content*) malloc(header->len + header->len2);
     char* message_recv = malloc(header->len + header->len2);
 
@@ -512,7 +535,6 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
 
     log_info(logger, "%s requested a GET of key: %s", name, message->key);
     operation = GET;
-    instance_operation = GET;
     sem_post(&esi_operation);
 
     sem_wait(&scheduler_response);
@@ -521,22 +543,23 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     assign_instance(algorithm, instances);          
     pthread_mutex_unlock(&lock);
     
-    send_answer(socket, key_is_not_blocked);
+    if(!key_is_not_blocked)
+        send_header(socket, 22);
+    else
+        send_header(socket, 23);
 
     dictionary_put(blocked_keys, message->key, NULL);
 
-    free(message->key);
-    free(message->value);
-    free(message);
-    free(message_recv);
+    //free(message->key);
+    //free(message->value);
+    ////free(message);
+    ////free(message_recv);
 }
 
 void operation_set(content_header * header, int socket, t_dictionary * blocked_keys, char* name)
-{
-    usleep(delay);
-    
+{  
     char* message_recv = malloc(header->len + header->len2);
-    message = (message_content*)malloc(sizeof(char) * header->len + header->len2);
+    message = (message_content*)malloc(sizeof(message_content));
 
     recv(socket, message_recv, header->len + header->len2, 0);
 
@@ -551,13 +574,15 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     {
         log_info(logger, "But Key was not requested before. Aborting ESI");
         abort_esi(socket);
+        return;
     }
+
+    operation = SET;
 
     pthread_mutex_lock(&lock);
     result = save_on_instance(instances);
     pthread_mutex_unlock(&lock);
 
-    operation = SET;
     sem_post(&esi_operation);
 
     sem_wait(&result_set);
@@ -573,10 +598,36 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
         send_header(socket, 23); //operacion con exito
     }
 
-    free(message->key);
-    free(message->value);
-    free(message);
-    free(message_recv); 
+    //free(message->key);
+    //free(message->value);
+    //free(message);
+    //free(message_recv); 
+}
+
+void operation_store(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
+{
+    message = (message_content*) malloc(header->len + header->len2);
+    char* message_recv = malloc(header->len + header->len2);
+
+    int result = recv(socket, message_recv, header->len + 1, 0);
+    if(result <= 0)
+        perror("Recv:");
+
+    message->key = message_recv;
+
+    log_info(logger, "%s requested a STORE of key: %s", name, message->key);
+
+    if(!dictionary_has_key(blocked_keys, message->key))
+    {
+        log_info(logger, "But Key was not requested before. Aborting ESI");
+        abort_esi(socket);
+        return;
+    }
+
+    operation = STORE;
+    sem_post(&esi_operation);
+    
+    dictionary_remove(blocked_keys, message->key);
 }
 
 void initiate_compactation()
@@ -591,28 +642,18 @@ void initiate_compactation()
 
 void abort_esi(int socket)
 {
-    operation = 33;
+    operation = ABORT;
     sem_post(&esi_operation);
     send_header(socket, 24);
     disconnect_socket(socket, false);
-}
-
-void send_answer(int socket,int key_is_not_blocked)
-{
-    if(!key_is_not_blocked)
-    {
-        send_header(socket, 22);
-    }
-    else
-    {
-        send_header(socket, 23);
-    }
 }
 
 void send_header(int socket, int id)
 {
     content_header* header = malloc(sizeof(content_header));
     header->id = id;
+    header->len = 0;
+    header->len2 = 0;
         
     send(socket, header, sizeof(content_header), 0);
 }
@@ -660,6 +701,7 @@ int save_on_instance(t_list* instances)
     if(chosen_one->is_active)
     {
         sem_post(&chosen_one->start);
+        log_info(logger, "Saving Key on %s", chosen_one->name);
         return 1;
     }
     else
@@ -788,7 +830,7 @@ _Algorithm to_algorithm(char* string)
     if(string_equals_ignore_case(string, "EL"))
         return EL;
     if(string_equals_ignore_case(string, "LSU"))
-        return LRU;
+        return LSU;
     if(string_equals_ignore_case(string, "KE"))
         return KE;
     log_warning(logger, "Incorrect algorithm type, using default EL");

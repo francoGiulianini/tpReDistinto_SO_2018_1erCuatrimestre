@@ -25,12 +25,15 @@
 #include <errno.h>
 #include <arpa/inet.h>
 
-#define GET 31
+/*#define GET 31
+#define STORE 32
 #define SET 33
-#define STATUS 39
+#define Abort 34
+#define STATUS 39*/
 
+typedef enum _Operations {GET, SET, STORE, STATUS, ABORT} _Operation;
 typedef enum _Clients {INSTANCE, ESI, SCHEDULER} _Client;
-typedef enum _Algorithms {EL, LRU, KE} _Algorithm;
+typedef enum _Algorithms {EL, LSU, KE} _Algorithm;
 
 struct addrinfo hints;
 struct addrinfo *serverInfo;
@@ -79,7 +82,6 @@ _Client hello_id;
 t_list * instances;
 message_content* message;
 config_instance_t* config_instance;
-int instance_operation;
 sem_t one_instance;
 sem_t one_esi;
 sem_t esi_operation;
@@ -99,9 +101,9 @@ void process_message_header(content_header* header, int socket);
 void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
 void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
 void operation_set(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
+void operation_store(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
 void initiate_compactation();
 void abort_esi(int socket);
-void send_answer(int socket,int key_bool);
 void send_header(int socket, int id);
 void assign_instance(_Algorithm algorithm, t_list* instances);
 int save_on_instance(t_list* instances);
