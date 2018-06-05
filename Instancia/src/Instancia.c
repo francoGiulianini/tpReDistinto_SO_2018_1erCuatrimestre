@@ -9,6 +9,7 @@
  */
 
 #include "Instancia.h"
+#include <sys/mman.h>
 
 char* port_c;
 char* ip_c;
@@ -147,14 +148,6 @@ void recibirTamanos ()
 	recv(coordinator_socket, configuracion, sizeof(configuracion), 0);
 }
 
-
-// funciones auxiliares, ignorelas
-
-/*int lenEnBloques (lenMensaje)
-float aux = lenMensaje / lenBloqueDeMem
-if (aux / 
-*/
-
 int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
 
 	int cantPaginas = 0;
@@ -196,13 +189,11 @@ void guardarEnTabla (entrada_t* tabla,content* mensaje, int posicion){
 	//actualizar archivo de clave?
 }
 
-
 void guardarEnMem (char* mem, content* mensaje, int posicion){
 	int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
 	memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor));
 	//actualizar archivo de clave?
 }
-
 
 void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 	switch (header->id){
@@ -238,6 +229,51 @@ void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 		case 13:{ //GET
 			//crear archivo con la clave que tenga la posicion en la tabla y el valor
 			//ver mmap
+
+			int result;
+			char *map;
+			char nombreDeClave[40] = content->clave;
+
+			int fd = open(nombreDeClave, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
+			if (fd == -1) {
+				perror("Error al intentar abrir el archivo");
+				exit(EXIT_FAILURE);
+    		}
+
+			result = lseek(fd, content_header->lenValor-1, SEEK_SET);
+			if (result == -1) {
+				close(fd);
+				perror("Error en lseek()");
+				exit(EXIT_FAILURE);
+			}
+			result = write(fd, "", 1);
+			if (result != 1) {
+				close(fd);
+				perror("Error al escribir el ultimo byte del archivo");
+				exit(EXIT_FAILURE);
+			}
+
+			map = mmap(0, content_header->lenValor, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+			if (map == MAP_FAILED) {
+				close(fd);
+				perror("Error la mapear el archivo");
+				exit(EXIT_FAILURE);
+			}
+
+			//aca hay que escribir el archivo			
+			memcpy(map, content->valor, content_header->lenValor);    
+
+
+			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que leberar los recursos, sepues lo acomodo
+
+			if (munmap(map, content_header->lenValor) == -1) {
+			perror("Error un-mmapping the file");
+
+			}
+
+   			 close(fd);
+			*/
+
 		}
 	}
 
