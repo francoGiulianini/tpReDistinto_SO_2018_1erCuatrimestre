@@ -426,18 +426,20 @@ void wait_question(int socket)
 
     if (header->id == 31) //coordinador pregunta por clave bloqueada
     {
-        char* message = (char*)malloc(header->len);
+        char* message = (char*)malloc(header->len + 1);
 
         recv(socket, message, header->len, 0);
+        message[header->len] = '\0';
 
         log_info(logger, "Coordinator asked to check Key: %s", message);
         check_key(message);
     }
     if (header->id == 32) //coordinador pide desbloquear clave
     {
-        char* message = (char*)malloc(header->len);
+        char* message = (char*)malloc(header->len + 1);
 
         recv(socket, message, header->len, 0);
+        message[header->len] = '\0';
 
         log_info(logger, "Coordinator asked to store Key: %s", message);
         unlock_key(message);

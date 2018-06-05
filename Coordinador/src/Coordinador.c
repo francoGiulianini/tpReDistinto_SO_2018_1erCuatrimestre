@@ -524,14 +524,13 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
 
 void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    message = (message_content*) malloc(header->len + header->len2);
-    char* message_recv = malloc(header->len + header->len2);
+    char* message_recv = (char*)malloc(header->len + header->len2);
+    message = (message_content*) malloc(sizeof(message_content));
+    message->key = malloc(header->len + 1);
 
-    int result = recv(socket, message_recv, header->len + 1, 0);
-    if(result <= 0)
-        perror("Recv:");
-
-    message->key = message_recv;
+    recv(socket, message_recv, header->len, 0);
+    memcpy(message->key, message_recv, header->len);
+    message->key[header->len] = '\0';
 
     log_info(logger, "%s requested a GET of key: %s", name, message->key);
     operation = GET;
@@ -546,9 +545,10 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     if(!key_is_not_blocked)
         send_header(socket, 22);
     else
+    {    
         send_header(socket, 23);
-
-    dictionary_put(blocked_keys, message->key, NULL);
+        dictionary_put(blocked_keys, message->key, NULL);
+    }   
 
     //free(message->key);
     //free(message->value);
@@ -560,13 +560,16 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 {  
     char* message_recv = malloc(header->len + header->len2);
     message = (message_content*)malloc(sizeof(message_content));
+    message->key = malloc(header->len + 1);
+    message->value = malloc(header->len2 + 1);
 
     recv(socket, message_recv, header->len + header->len2, 0);
 
-    message->key = malloc(header->len);
-    message->value = malloc(header->len2);
+    //deserializacion    
     memcpy(message->key, message_recv, header->len);
+    message->key[header->len] = '\0';
     memcpy(message->value, message_recv + header->len, header->len2);
+    message->value[header->len2] = '\0';
 
     log_info(logger, "%s requested a SET of Key: %s, with Value: %s", name, message->key, message->value);
 
@@ -606,14 +609,16 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 
 void operation_store(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    message = (message_content*) malloc(header->len + header->len2);
+    message = (message_content*) malloc(sizeof(message_content));
     char* message_recv = malloc(header->len + header->len2);
 
-    int result = recv(socket, message_recv, header->len + 1, 0);
+    int result = recv(socket, message_recv, header->len, 0);
     if(result <= 0)
         perror("Recv:");
 
-    message->key = message_recv;
+    message->key = malloc(header->len + 1);
+    memcpy(message->key, message_recv, header->len);
+    message->key[header->len] = '\0';
 
     log_info(logger, "%s requested a STORE of key: %s", name, message->key);
 
@@ -628,6 +633,8 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
     sem_post(&esi_operation);
     
     dictionary_remove(blocked_keys, message->key);
+
+    send_header(socket, 23); //operacion con exito
 }
 
 void initiate_compactation()
