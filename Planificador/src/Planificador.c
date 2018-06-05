@@ -32,6 +32,7 @@ int main(void)
     lista_ready = list_create();
     lista_bloqueados = list_create();
     claves_bloqueadas_por_esis = list_create();
+    finished_esis = queue_create();
 
     config = config_create("Config.cfg");
     if(config == NULL)
@@ -90,13 +91,14 @@ int main(void)
 
         update_values();
 
-        if(blocked_esi_by_console)
+        /*if(blocked_esi_by_console)
         {
             blocked_esi_by_console = 0;
             sem_post(&esi_executing);
             pthread_mutex_unlock(&pause_mutex);
             continue;
-        }
+        }*/ 
+        //LA CLAVE SE BLOQUEA NO EL ESI
 
         if(!respuesta_ok)
         {
@@ -358,6 +360,7 @@ void HostConnections()
                         fin_de_esi = 1;
                         respuesta_ok = 1;
                         abort_esi = 1;
+                        sem_post(&esi_respuesta);
                     }
                 }  
             }  
@@ -408,6 +411,8 @@ void send_header(int socket, int id)
 {
     content_header * header = malloc(sizeof(content_header));
     header->id = id;
+    header->len = 0;
+    header->len2 = 0;
     
     send(socket, header, sizeof(content_header), 0);
 }
@@ -450,10 +455,10 @@ void wait_question(int socket)
         log_info(logger, "All Connected, Initiating Scheduler");
     }
 
-    free(header->id);
+    /*free(header->id);
     free(header->len);
     free(header->len2);
-    free(header);
+    free(header);*/
 }
 
 void wait_start(int socket)
@@ -607,8 +612,9 @@ void send_esi_to_ready(t_esi * un_esi)
 void finish_esi(t_esi * un_esi)
 {
     //agregar a cola finalizados
+    queue_push(finished_esis, un_esi);
 
-    abort_esi = 1;
+    abort_esi = 0;
 }
 
 _Algorithm to_algorithm(char* string)

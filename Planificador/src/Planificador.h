@@ -68,6 +68,7 @@ t_esi* un_esi;
 t_list * lista_ready; //para no marear lo pongo en español
 t_list * lista_bloqueados;
 t_list * claves_bloqueadas_por_esis;
+t_queue * finished_esis;
 pthread_mutex_t pause_mutex;
 pthread_mutex_t new_esi;
 sem_t hay_esis;
