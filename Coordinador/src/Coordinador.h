@@ -24,6 +24,7 @@
 #include <semaphore.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <time.h>
 
 /*#define GET 31
 #define STORE 32
@@ -77,6 +78,7 @@ t_log * logger;
 int listeningPort;
 _Algorithm algorithm;
 int delay;
+struct timespec delay_req, time_rem;
 struct sockaddr_in serverAddress;
 _Client hello_id;
 t_list * instances;

@@ -73,7 +73,9 @@ void get_config_values(t_config* config)
     if(config_has_property(config, "Retardo"))
     {
         delay = config_get_int_value(config, "Retardo");
-        log_info(logger, "Delay from config file: %d", delay);
+        log_info(logger, "Delay(in miliseconds) from config file: %d", delay);
+        delay_req.tv_sec = 0;
+        delay_req.tv_nsec = (long int)delay * 1000 * 1000;
     }
     else
         exit_with_error(logger, "Cannot read Delay from config file");
@@ -496,8 +498,6 @@ void process_message_header(content_header* header, int socket)
 
 void process_message_header_esi(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    usleep(delay);
-
     switch(header->id)
     {
         case 21: //ESI pide un GET
@@ -533,6 +533,10 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     message->key[header->len] = '\0';
 
     log_info(logger, "%s requested a GET of key: %s", name, message->key);
+    //retardo de operaciones
+    nanosleep(&delay_req, &time_rem);
+
+    //flag para hilos instancia y planificador
     operation = GET;
     sem_post(&esi_operation);
 
@@ -572,6 +576,8 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     message->value[header->len2] = '\0';
 
     log_info(logger, "%s requested a SET of Key: %s, with Value: %s", name, message->key, message->value);
+    //retardo de operaciones
+    nanosleep(&delay_req, &time_rem);
 
     if(!dictionary_has_key(blocked_keys, message->key))
     {
@@ -580,6 +586,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
         return;
     }
 
+    //flag para hilos instancia y planificador
     operation = SET;
 
     pthread_mutex_lock(&lock);
@@ -616,11 +623,14 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
     if(result <= 0)
         perror("Recv:");
 
+    //deserealizacion
     message->key = malloc(header->len + 1);
     memcpy(message->key, message_recv, header->len);
     message->key[header->len] = '\0';
 
     log_info(logger, "%s requested a STORE of key: %s", name, message->key);
+    //retardo de operacion
+    nanosleep(&delay_req, &time_rem);
 
     if(!dictionary_has_key(blocked_keys, message->key))
     {
@@ -629,6 +639,7 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
         return;
     }
 
+    //flag para hilos instancia y planificador
     operation = STORE;
     sem_post(&esi_operation);
     
