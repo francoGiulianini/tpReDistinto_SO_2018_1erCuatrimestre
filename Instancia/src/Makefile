@@ -1,7 +1,7 @@
-CFLAGS = 
+CFLAGS = -lcommons
 
 %: %.o
-	cc -o $(*F) $(*F).o $(CFLAGS)
+	$(CC) -o $(*F) $(*F).o $(CFLAGS)
 
 Instancia: Instancia.o
 
