@@ -53,11 +53,12 @@ int main(int argc, char* argv[])
 
 	while(1)
 	{
-		buffer = recv(scheduler_socket, buffer, sizeof(content_header), 0);
+		recv(scheduler_socket, buffer, sizeof(content_header), 0);
 		if (buffer->id != 21)
 		{
 			send_message(scheduler_socket, 24, "", "");
-			exit_with_error(logger, "Message id expected 21, but got: %d", buffer->id);
+			log_error(logger, "Message id expected 21, but got: %d", buffer->id);
+			exit_with_error(logger, "");
 		}
 		if (!flag_blocked) parsed = parse_line();
 		send_parsed_operation(parsed, &flag_blocked);
@@ -260,12 +261,11 @@ void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 				break;
 			case 24:
 				send_message(scheduler_socket, 24, "", "");
-				log_error(logger, "ESI aborted on coordinator's orders");
-				exit(EXIT_FAILURE);
+				exit_with_error(logger, "ESI aborted on coordinator's order");
 				break;
 			default:
-				log_error(logger, "Message id not valid: %d", buffer->id);
 				send_message(scheduler_socket, 24, "", "");
+				log_error(logger, "Message id not valid: %d", buffer->id);
 				exit_with_error(logger, "");
 		}
 	}
