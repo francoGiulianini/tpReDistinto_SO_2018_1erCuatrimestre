@@ -18,4 +18,6 @@ cleanObj:
 cleanAll: cleanObj
 	for dir in $(CARPETAS); do \
 	rm -f $$dir/src/$$dir; \
+	rm -f *.log; \
+	rm -f $$dir/src/*.log; \
 	done
