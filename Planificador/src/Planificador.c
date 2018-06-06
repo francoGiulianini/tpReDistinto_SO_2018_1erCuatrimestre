@@ -178,6 +178,10 @@ void new_blocked_keys()
         clave_bloqueada_t * clave_bloqueada = malloc(sizeof(clave_bloqueada_t));
 
         clave_bloqueada->cola_esis_bloqueados = queue_create();
+        t_esi* one_esi = malloc(sizeof(t_esi));
+        one_esi->name = malloc(8);
+        strcpy(one_esi->name, "CONSOLA");
+        queue_push(clave_bloqueada->cola_esis_bloqueados, one_esi);
         clave_bloqueada->key = blocked_keys[i];
 
         list_add(lista_bloqueados, clave_bloqueada);
@@ -503,6 +507,13 @@ void check_key(char * key)
 	}
     else
     {
+        t_esi* one_esi = queue_peek(a_key->cola_esis_bloqueados);
+        if(one_esi != NULL && string_equals_ignore_case(one_esi->name, "CONSOLA"))
+        {
+            //esta bloqueado por clave desde configuracion
+            one_esi = queue_pop(a_key->cola_esis_bloqueados);
+            queue_push(a_key->cola_esis_bloqueados, un_esi);
+        }
         if(queue_is_empty(a_key->cola_esis_bloqueados))
         {
             send_header(socket_c, 31); //31 clave libre
