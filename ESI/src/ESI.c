@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
 
 	check_arguments(argc);
 
-	script = fopen(argv[1], "rb");
+	script = fopen(argv[1], "r");
 	if(script == NULL)
         exit_with_error(logger, "Cannot open script");
 
