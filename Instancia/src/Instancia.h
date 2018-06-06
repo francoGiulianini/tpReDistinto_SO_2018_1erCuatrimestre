@@ -10,6 +10,8 @@
 #include <commons/log.h>
 #include <commons/config.h>
 #include <commons/string.h>
+#include <sys/mman.h>
+#include <fcntl.h>
 
 #define WELCOME_MSG 8
 
