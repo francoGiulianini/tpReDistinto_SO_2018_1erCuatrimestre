@@ -256,7 +256,13 @@ void host_instance(void* arg)
                     just_disconnected = 1;
                 }
                 else
-                    just_disconnected = 0;*/
+                    just_disconnected = 0;
+
+                send(socket, message->key, strlen(message->key) + 1, 0);
+
+                //esperar confirmacion de la instancia
+                recv(socket, header, sizeof(content_header), 0);    
+                */
 
                 log_info(logger, "Instancia hace GET");
 
@@ -265,8 +271,8 @@ void host_instance(void* arg)
             }
             case SET:
             {
-                /*int length1 = strlen(message->key);
-                int length2 = strlen(message->value);
+                /*int length1 = strlen(message->key) + 1;
+                int length2 = strlen(message->value) + 1;
 
                 header->id = 12;
                 header->len = length1;
@@ -542,17 +548,20 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
 
     sem_wait(&scheduler_response);
     
-    pthread_mutex_lock(&lock);
-    assign_instance(algorithm, instances);          
-    pthread_mutex_unlock(&lock);
-    
     if(!key_is_not_blocked)
         send_header(socket, 22);
     else
     {    
         send_header(socket, 23);
         dictionary_put(blocked_keys, message->key, NULL);
-    }   
+    } 
+
+    pthread_mutex_lock(&lock);
+    assign_instance(algorithm, instances);          
+    pthread_mutex_unlock(&lock);  
+
+    //esperar confirmacion de la instancia
+    sem_wait(&result_get);
 
     //free(message->key);
     //free(message->value);
