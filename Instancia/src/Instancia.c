@@ -15,6 +15,7 @@ char* port_c;
 char* ip_c;
 char* name;
 int noHayLugar;
+char * msjAlCoordinador = ""
 
 int main(void)
 {
@@ -29,10 +30,14 @@ int main(void)
 	
 	send(coordinator_socket, name, strlen (name), 0);
 	
-	recibirTamanos();	
+	recibirTamanos();
 
+	/* inicializamos la tabla */
 	entrada_t tabla[configuracion->cantEntradas];
-
+	for ( i = 0; i = configuracion->cantEntradas -1 ; i++){
+		tabla[i].clave = "vacio"
+	}
+	
 	char* mem = malloc(sizeof (char) *configuracion->cantEntradas*configuracion->tamanioEntradas);
 	while(1)
 	{
@@ -199,18 +204,23 @@ void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 	switch (header->id){
 		case 11 : {
 			// compactar
+			// circular
+			for i = 
 		}
 
-		case 12 : {
+		case 12 : { //SET
+
+			
 			content *mensaje = malloc (header->lenClave + header->lenValor);
 
 			recv(coordinator_socket, mensaje, sizeof (header->lenClave + header->lenValor), 0);
 
-			int posicion = consultarTabla (tabla, mensaje, header->lenValor);
+			int posicion = consultarTabla (tabla, mensaje, header->lenValor);	
 
 			if (noHayLugar){
-				//no se puede enviar enteros, ver como envia el coordinador
-				send(coordinator_socket, 11, sizeof(int), 0); //hay que compactar
+				
+				msjAlCoordinador = "compactar"
+				send(coordinator_socket, msjAlCoordinador, sizeof(int), 0); //hay que compactar
 
 				//activar semaforo 
 
@@ -221,14 +231,15 @@ void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 			guardarEnTabla (&tabla,mensaje,posicion);
 			guardarEnMem (&mem,mensaje,posicion);
 
-			//no se puede enviar enteros, ver como envia el coordinador
-			send(coordinator_socket, 12, sizeof(int), 0);
+			msjAlCoordinador = "SET_OK"
+			send(coordinator_socket, msjAlCoordinador, sizeof(int), 0);
 
 			free(mensaje);
 		}
 		case 13:{ //GET
 			//crear archivo con la clave que tenga la posicion en la tabla y el valor
 			//ver mmap
+
 
 			int result;
 			char *map;
@@ -253,7 +264,7 @@ void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 				exit(EXIT_FAILURE);
 			}
 
-			map = mmap(0, content_header->lenValor, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+			map = mmap(NULL, content_header->lenValor, PROT_WRITE, MAP_SHARED, fd, NULL);
 			if (map == MAP_FAILED) {
 				close(fd);
 				perror("Error la mapear el archivo");
@@ -261,7 +272,8 @@ void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 			}
 
 			//aca hay que escribir el archivo			
-			memcpy(map, content->valor, content_header->lenValor);    
+			memcpy(map, content->valor, content_header->lenValor);
+			memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor));
 
 
 			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que leberar los recursos, sepues lo acomodo
