@@ -167,9 +167,9 @@ int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
 		cantPaginas = (tamanioMensaje / configuracion->tamanioEntradas) + 1;
 	}
 	for (int i = 0; i <= configuracion->cantEntradas; i++){
-		if (lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio")){
+		if ((lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio")) || string_equals_ignore_case(tabla[i].clave, mensaje->clave)){
 			for (int j = i; j < i + cantPaginas; j++){
-				lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio");
+				lugarVacio = ( string_equals_ignore_case(tabla[i].clave, "vacio") || string_equals_ignore_case(tabla[i].clave, mensaje->clave));
 			}
 			if (lugarVacio) {return i;}
 		}
@@ -218,7 +218,7 @@ void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 			int posicion = consultarTabla (tabla, mensaje, header->lenValor);	
 
 			if (noHayLugar){
-				
+
 				msjAlCoordinador = "compactar"
 				send(coordinator_socket, msjAlCoordinador, sizeof(int), 0); //hay que compactar
 
