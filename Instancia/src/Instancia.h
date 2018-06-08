@@ -5,15 +5,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <commons/log.h>
 #include <commons/config.h>
 #include <commons/string.h>
+#include <commons/collections/list.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 
 #define WELCOME_MSG 8
+#define FILE_SIZE 1024 //en bytes
 
 typedef struct
 {
@@ -40,10 +45,18 @@ typedef struct
     int tamanio;
 } entrada_t;
 
+typedef struct
+{
+    char* clave;
+    char* map;
+    int fd;
+} map_t;
+
 t_log * logger;
 t_config * config;
 configuracion_t * configuracion;
 int coordinator_socket;
+t_list* lista_claves;
 
 void configure_logger();
 void exit_with_error(t_log* logger, char* error_message);
@@ -54,8 +67,12 @@ int connect_to_server(char * ip, char * port, char * server);
 void  send_hello(int socket);
 void recibirTamanos();
 int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje);
-void guardarEnTabla (entrada_t* tabla,content* mensaje, int posicion);
-void guardarEnMem (char* mem, content* mensaje, int posicion);
-void procesarHeader (content_header* header, entrada_t* tabla, char* mem); 
+void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion);
+void guardarEnMem (content* mensaje, int posicion);
+int revisarLista(char* clave);
+void guardarEnClaves(content_header* header, char* clave);
+void procesarHeader (content_header* header, entrada_t* tabla);
+void send_header(int socket, int id);
+map_t * buscar_por_clave(t_list* lista_claves, char* clave);
 
 #endif

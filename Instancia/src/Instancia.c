@@ -9,13 +9,13 @@
  */
 
 #include "Instancia.h"
-#include <sys/mman.h>
 
 char* port_c;
 char* ip_c;
 char* name;
 int noHayLugar;
-char * msjAlCoordinador = ""
+char* mem; //storage
+//char * msjAlCoordinador = "";
 
 int main(void)
 {
@@ -31,23 +31,30 @@ int main(void)
 	send(coordinator_socket, name, strlen (name), 0);
 	
 	recibirTamanos();
+	configuracion = (configuracion_t*)malloc(sizeof(configuracion_t));
+
+	recv(coordinator_socket, configuracion, sizeof(configuracion_t), 0);
+	log_info(logger, "Received Number of Entries: %d", configuracion->cantEntradas);
+	log_info(logger, "Received Size of Entries: %d", configuracion->tamanioEntradas);
 
 	/* inicializamos la tabla */
 	entrada_t tabla[configuracion->cantEntradas];
-	for ( i = 0; i = configuracion->cantEntradas -1 ; i++){
-		tabla[i].clave = "vacio"
+	for (int i = 0; i <= configuracion->cantEntradas; i++){
+		strcpy(tabla[i].clave, "vacio");
 	}
+
+	lista_claves = list_create();
 	
-	char* mem = malloc(sizeof (char) *configuracion->cantEntradas*configuracion->tamanioEntradas);
+	mem = malloc(sizeof (char) *configuracion->cantEntradas*configuracion->tamanioEntradas);
 	while(1)
 	{
 		content_header *header = malloc (sizeof (content_header));
 
 		recv(coordinator_socket, header, sizeof (content_header), 0);
-		procesarHeader (header, &tabla, &mem);
+		procesarHeader (header, tabla);
 
-		free(header->lenClave);
-		free(header->lenValor);
+		//free(header->lenClave);
+		//free(header->lenValor);
 		free(header);
 	}
 	return EXIT_SUCCESS;
@@ -135,22 +142,22 @@ int connect_to_server(char * ip, char * port, char *server)
 	return server_socket;
 }
 
-void  send_hello(int socket) 
+void send_hello(int socket) 
 {
 	content_header * header_c = (content_header *) malloc (sizeof(content_header));
 	
 	header_c->id=10;
-	header_c->lenClave=strlen(name);
+	header_c->lenClave= strlen(name);
+	header_c->lenValor= 0;
 
 	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
 		exit_with_error(logger, "Cannot send Hello");
 }
+
 void recibirTamanos ()
 {
-	configuracion = (configuracion_t*)malloc(sizeof(configuracion_t));
-
-	recv(coordinator_socket, configuracion, sizeof(configuracion), 0);
+	
 }
 
 int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
@@ -178,7 +185,7 @@ int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
 
 }
 
-void guardarEnTabla (entrada_t* tabla,content* mensaje, int posicion){
+void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
 
 	int cantPaginas = 0;
 	int tamanioMensaje = strlen(mensaje->clave);
@@ -194,87 +201,126 @@ void guardarEnTabla (entrada_t* tabla,content* mensaje, int posicion){
 	//actualizar archivo de clave?
 }
 
-void guardarEnMem (char* mem, content* mensaje, int posicion){
+void guardarEnMem (content* mensaje, int posicion){
 	int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
 	memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor));
-	//actualizar archivo de clave?
+	//aca hay que escribir el archivo	
+	//buscar en la lista la claves
+	map_t* una_clave = buscar_por_clave(lista_claves, mensaje->clave);
+	if(una_clave == NULL)
+		log_error(logger, "ERROR");
+
+	memcpy(una_clave->map, mensaje->valor, strlen(mensaje->valor));
 }
 
-void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
+int revisarLista(char* clave)
+{
+	map_t* una_clave = buscar_por_clave(lista_claves, clave);
+	if(una_clave == NULL)
+		return 0;
+	else
+		return 1;
+}
+
+void guardarEnClaves(content_header* header, char* clave)
+{
+	//guardar en una tabla los maps
+	int result;
+	int fd = open(clave, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
+	if (fd == -1) {
+		perror("Error al intentar abrir el archivo");
+		exit(EXIT_FAILURE);
+	}
+
+	result = lseek(fd, FILE_SIZE/*definir un maximo? ->header->lenValor-1*/, SEEK_SET);
+	if (result == -1) {
+		close(fd);
+		perror("Error en lseek()");
+		exit(EXIT_FAILURE);
+	}
+	result = write(fd, "", 1);
+	if (result != 1) {
+		close(fd);
+		perror("Error al escribir el ultimo byte del archivo");
+		exit(EXIT_FAILURE);
+	}
+
+	map_t* una_clave = malloc(sizeof(map_t));
+	una_clave->clave = malloc(header->lenClave);
+	una_clave->map = mmap(NULL, FILE_SIZE/*header->lenValor*/, PROT_WRITE, MAP_SHARED, fd, 0);
+	if (una_clave->map == MAP_FAILED) {
+		close(fd);
+		perror("Error la mapear el archivo");
+		exit(EXIT_FAILURE);
+	}
+	una_clave->fd = fd; //para despues cerrarlo si hace falta
+
+	//quizas seria mejor un diccionario
+	list_add(lista_claves, una_clave);
+}
+
+void procesarHeader (content_header* header, entrada_t* tabla){
 	switch (header->id){
 		case 11 : {
 			// compactar
-			// circular
-			for i = 
+			// circular (ojo que circular es para reemplazar claves, no para compactar)
+			//for i = 
 		}
 
-		case 12 : { //SET
+		case 12 : { //SET			
+			char *mensaje_recv = malloc (header->lenClave + header->lenValor);
+			content* mensaje = (content*)malloc(sizeof(content));
+    		mensaje->clave = malloc(header->lenClave + 1);
+    		mensaje->valor = malloc(header->lenValor + 1);
 
-			
-			content *mensaje = malloc (header->lenClave + header->lenValor);
+			recv(coordinator_socket, mensaje_recv, header->lenClave + header->lenValor, 0);
 
-			recv(coordinator_socket, mensaje, sizeof (header->lenClave + header->lenValor), 0);
+			memcpy(mensaje->clave, mensaje_recv, header->lenClave);
+			mensaje->clave[header->lenClave] = '\0';
+			memcpy(mensaje->valor, mensaje_recv + header->lenClave, header->lenValor);
+			mensaje->valor[header->lenValor] = '\0';
 
+			log_warning(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
 			int posicion = consultarTabla (tabla, mensaje, header->lenValor);	
 
 			if (noHayLugar){
+				//hay que compactar
 
-				msjAlCoordinador = "compactar"
-				send(coordinator_socket, msjAlCoordinador, sizeof(int), 0); //hay que compactar
+				//msjAlCoordinador = "compactar"
+				send_header(coordinator_socket, 11);
 
 				//activar semaforo 
 
-				int posicion = consultarTabla (mensaje, tabla, strlen(mensaje->valor));
+				int posicion = consultarTabla (tabla, mensaje, strlen(mensaje->valor));
 
 			}
 
-			guardarEnTabla (&tabla,mensaje,posicion);
-			guardarEnMem (&mem,mensaje,posicion);
+			guardarEnTabla (tabla, mensaje, posicion);
+			guardarEnMem (mensaje, posicion);
 
-			msjAlCoordinador = "SET_OK"
-			send(coordinator_socket, msjAlCoordinador, sizeof(int), 0);
+			//msjAlCoordinador = "SET_OK"
+			send_header(coordinator_socket, 12);
 
 			free(mensaje);
 		}
 		case 13:{ //GET
+			log_info(logger, "GET");
 			//crear archivo con la clave que tenga la posicion en la tabla y el valor
 			//ver mmap
+			char * clave = (char*)malloc (header->lenClave + 1);
 
-
-			int result;
-			char *map;
-			char nombreDeClave[40] = content->clave;
-
-			int fd = open(nombreDeClave, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
-			if (fd == -1) {
-				perror("Error al intentar abrir el archivo");
-				exit(EXIT_FAILURE);
-    		}
-
-			result = lseek(fd, content_header->lenValor-1, SEEK_SET);
-			if (result == -1) {
-				close(fd);
-				perror("Error en lseek()");
-				exit(EXIT_FAILURE);
-			}
-			result = write(fd, "", 1);
-			if (result != 1) {
-				close(fd);
-				perror("Error al escribir el ultimo byte del archivo");
-				exit(EXIT_FAILURE);
-			}
-
-			map = mmap(NULL, content_header->lenValor, PROT_WRITE, MAP_SHARED, fd, NULL);
-			if (map == MAP_FAILED) {
-				close(fd);
-				perror("Error la mapear el archivo");
-				exit(EXIT_FAILURE);
-			}
-
-			//aca hay que escribir el archivo			
-			memcpy(map, content->valor, content_header->lenValor);
-			memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor));
-
+			recv(coordinator_socket, clave, header->lenClave + 1, 0);
+			//deserializar
+			clave[header->lenClave] = '\0';
+			log_warning(logger, "Key: %s", clave);
+			//revisar si la clave ya existe
+			if(!revisarLista(clave))
+			{
+				guardarEnClaves(header, clave);	
+			}						
+			
+			//avisar al coordinador que creo el archivo (ID = 12)
+			send_header(coordinator_socket, 12);
 
 			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que leberar los recursos, sepues lo acomodo
 
@@ -289,4 +335,24 @@ void procesarHeader (content_header* header, entrada_t* tabla, char* mem){
 		}
 	}
 
+}
+
+void send_header(int socket, int id)
+{
+    content_header* header = malloc(sizeof(content_header));
+    header->id = id;
+    header->lenClave = 0;
+    header->lenValor = 0;
+        
+    send(socket, header, sizeof(content_header), 0);
+}
+
+map_t * buscar_por_clave(t_list* lista_claves, char* clave)
+{
+	bool _es_esta(map_t* p)
+	{
+		return string_equals_ignore_case(p->clave, clave);
+	}
+
+	return list_find(lista_claves, _es_esta);
 }
