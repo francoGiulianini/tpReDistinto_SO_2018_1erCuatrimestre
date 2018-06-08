@@ -243,17 +243,17 @@ void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 		switch (buffer->id)
 		{
 			case 23:
-			if(!feof(script))
-			{
-				bloqueado = false;
-				send_message(scheduler_socket, 22, "", "");
-				destruir_operacion(parsed);
-			}
-			else
-			{
-				send_message(scheduler_socket, 24, "", "");
-				exit(EXIT_SUCCESS);
-			}
+				if(!feof(script))
+				{
+					bloqueado = false;
+					send_message(scheduler_socket, 22, "", "");
+					destruir_operacion(parsed);
+				}
+				else
+				{
+					send_message(scheduler_socket, 24, "", "");
+					exit(EXIT_SUCCESS);
+				}
 				break;
 			case 22:
 				bloqueado = true;
