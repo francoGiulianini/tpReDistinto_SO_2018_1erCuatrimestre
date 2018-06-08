@@ -549,20 +549,20 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     sem_wait(&scheduler_response);
     
     if(!key_is_not_blocked)
+    {       
         send_header(socket, 22);
+    }    
     else
     {    
         send_header(socket, 23);
+
+        pthread_mutex_lock(&lock);
+        assign_instance(algorithm, instances);          
+        pthread_mutex_unlock(&lock);
+        
         dictionary_put(blocked_keys, message->key, NULL);
     } 
-
-    pthread_mutex_lock(&lock);
-    assign_instance(algorithm, instances);          
-    pthread_mutex_unlock(&lock);  
-
-    //esperar confirmacion de la instancia
-    sem_wait(&result_get);
-
+  
     //free(message->key);
     //free(message->value);
     ////free(message);
