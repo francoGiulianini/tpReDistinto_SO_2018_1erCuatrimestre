@@ -262,9 +262,24 @@ void guardarEnClaves(content_header* header, char* clave)
 void procesarHeader (content_header* header, entrada_t* tabla){
 	switch (header->id){
 		case 11 : {
-			// compactar
+			// compactar			
+			int clavesVacias = 0;
+			int j = 0;
+			for (int i = 0; i <= configuracion->cantEntradas; i++){
+				if (tabla[i].clave == "vacio"){
+					int clavesVacias = 1;
+					int j = i;
+					while ((tabla[j].clave == "vacio") && (j <= configuracion->cantEntradas)){
+						clavesVacias++;
+						j++;
+					}
+					for (int j = i; j+clavesVacias ; j++){
+						tabla[j].clave == tabla[j+clavesVacias].clave;
+					}
+				
+				}	
+			}
 			// circular (ojo que circular es para reemplazar claves, no para compactar)
-			//for i = 
 		}
 
 		case 12 : { //SET			
