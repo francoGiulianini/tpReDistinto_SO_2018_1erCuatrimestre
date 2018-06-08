@@ -31,12 +31,7 @@ int main(void)
 	send(coordinator_socket, name, strlen (name), 0);
 	
 	recibirTamanos();
-	configuracion = (configuracion_t*)malloc(sizeof(configuracion_t));
-
-	recv(coordinator_socket, configuracion, sizeof(configuracion_t), 0);
-	log_info(logger, "Received Number of Entries: %d", configuracion->cantEntradas);
-	log_info(logger, "Received Size of Entries: %d", configuracion->tamanioEntradas);
-
+	
 	/* inicializamos la tabla */
 	entrada_t tabla[configuracion->cantEntradas];
 	for (int i = 0; i <= configuracion->cantEntradas; i++){
@@ -157,7 +152,11 @@ void send_hello(int socket)
 
 void recibirTamanos ()
 {
-	
+	configuracion = (configuracion_t*)malloc(sizeof(configuracion_t));
+
+	recv(coordinator_socket, configuracion, sizeof(configuracion_t), 0);
+	log_info(logger, "Received Number of Entries: %d", configuracion->cantEntradas);
+	log_info(logger, "Received Size of Entries: %d", configuracion->tamanioEntradas);
 }
 
 int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
@@ -203,18 +202,23 @@ void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
 
 void guardarEnMem (content* mensaje, int posicion){
 	int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
-	memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor));
+	memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor) + 1);
 	//aca hay que escribir el archivo	
 	//buscar en la lista la claves
 	map_t* una_clave = buscar_por_clave(lista_claves, mensaje->clave);
 	if(una_clave == NULL)
 		log_error(logger, "ERROR");
 
-	memcpy(una_clave->map, mensaje->valor, strlen(mensaje->valor));
+	memcpy(una_clave->map, mensaje->valor, strlen(mensaje->valor) + 1);
 }
 
 int revisarLista(char* clave)
 {
+	/*bool _tiene_misma_clave(map_t* p)
+	{
+		return string_equals_ignore_case(p->clave, clave);
+	} //esta funcion podria ser mejor
+	return list_any_satisfy(lista_claves, _tiene_misma_clave);*/
 	map_t* una_clave = buscar_por_clave(lista_claves, clave);
 	if(una_clave == NULL)
 		return 0;
@@ -245,8 +249,9 @@ void guardarEnClaves(content_header* header, char* clave)
 		exit(EXIT_FAILURE);
 	}
 
-	map_t* una_clave = malloc(sizeof(map_t));
-	una_clave->clave = malloc(header->lenClave);
+	map_t* una_clave = (map_t*)malloc(sizeof(map_t));
+	una_clave->clave = malloc(header->lenClave + 1);
+	memcpy(una_clave->clave, clave, header->lenClave);
 	una_clave->map = mmap(NULL, FILE_SIZE/*header->lenValor*/, PROT_WRITE, MAP_SHARED, fd, 0);
 	if (una_clave->map == MAP_FAILED) {
 		close(fd);
@@ -262,7 +267,7 @@ void guardarEnClaves(content_header* header, char* clave)
 void procesarHeader (content_header* header, entrada_t* tabla){
 	switch (header->id){
 		case 11 : {
-			// compactar			
+			// compactar
 			int clavesVacias = 0;
 			int j = 0;
 			for (int i = 0; i <= configuracion->cantEntradas; i++){
@@ -280,6 +285,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				}	
 			}
 			// circular (ojo que circular es para reemplazar claves, no para compactar)
+			break;
 		}
 
 		case 12 : { //SET			
@@ -317,9 +323,9 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			send_header(coordinator_socket, 12);
 
 			free(mensaje);
+			break;
 		}
 		case 13:{ //GET
-			log_info(logger, "GET");
 			//crear archivo con la clave que tenga la posicion en la tabla y el valor
 			//ver mmap
 			char * clave = (char*)malloc (header->lenClave + 1);
@@ -327,16 +333,16 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
 			clave[header->lenClave] = '\0';
-			log_warning(logger, "Key: %s", clave);
 			//revisar si la clave ya existe
 			if(!revisarLista(clave))
 			{
-				guardarEnClaves(header, clave);	
+				guardarEnClaves(header, clave);
+				log_warning(logger, "Creating file for Key: %s", clave);
 			}						
 			
 			//avisar al coordinador que creo el archivo (ID = 12)
 			send_header(coordinator_socket, 12);
-
+			break;
 			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que leberar los recursos, sepues lo acomodo
 
 			if (munmap(map, content_header->lenValor) == -1) {
