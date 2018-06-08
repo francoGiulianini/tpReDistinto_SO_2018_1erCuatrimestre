@@ -428,37 +428,38 @@ void wait_question(int socket)
     recv(socket, header, sizeof(content_header), 0);
     log_info(logger, "Received header id: %d", header->id);
 
-    if (header->id == 31) //coordinador pregunta por clave bloqueada
+    switch (header->id)
     {
-        char* message = (char*)malloc(header->len + 1);
+    	case 31:        //coordinador pregunta por clave bloqueada
+        	char* message = (char*)malloc(header->len + 1);
 
-        recv(socket, message, header->len, 0);
-        message[header->len] = '\0';
+        	recv(socket, message, header->len, 0);
+        	message[header->len] = '\0';
 
-        log_info(logger, "Coordinator asked to check Key: %s", message);
-        check_key(message);
-    }
-    if (header->id == 32) //coordinador pide desbloquear clave
-    {
-        char* message = (char*)malloc(header->len + 1);
+        	log_info(logger, "Coordinator asked to check Key: %s", message);
+        	check_key(message);
 
-        recv(socket, message, header->len, 0);
-        message[header->len] = '\0';
+    	case 32:        //coordinador pide desbloquear clave
+        	char* message = (char*)malloc(header->len + 1);
 
-        log_info(logger, "Coordinator asked to store Key: %s", message);
-        unlock_key(message);
-    }
-    if (header->id == 33) //coordinador no pregunta nada (operacion SET)
-    {
-        log_info(logger, "Coordinator asked to set a key");
-    }                        
-    if (header->id == 34)
-    {
-        abort_esi = 1;
-    }
-    if (header->id == 35)
-    {
-        log_info(logger, "All Connected, Initiating Scheduler");
+        	recv(socket, message, header->len, 0);
+        	message[header->len] = '\0';
+
+        	log_info(logger, "Coordinator asked to store Key: %s", message);
+        	unlock_key(message);
+
+    	case 33:        //coordinador no pregunta nada (operacion SET)
+        	log_info(logger, "Coordinator asked to set a key");
+
+    	case 34:
+        	abort_esi = 1;
+
+    	case 35:
+        	log_info(logger, "All Connected, Initiating Scheduler");
+
+    	default:
+        	log_error(logger, "Message id not valid: %d", buffer->id);
+        	exit_with_error(logger, "");
     }
 
     /*free(header->id);
@@ -542,20 +543,37 @@ void unlock_key(char* key)
             //estimar la rafaga del esi que se libera
             calculate_estimation(otro_esi);
 
-            log_info(logger, "New Estimation for: %s is: %f", 
+            log_info(logger, "New Estimation for: %s is: %f",
                 otro_esi->name, otro_esi->cpu_time_estimated);
 
             list_add(lista_ready, otro_esi);
             //hay que reordenar la lista de ready
 
-            //sort_list_by_estimation();
+            //sort_list_by_estimation();  
             break;
         }
         case SJFCD:
         {
-            //revisar estimaciones de un_esi y el que se libera
+            calculate_estimation(un_esi);
+            calculate_estimation(otro_esi);		//revisar estimaciones de un_esi y el que se libera
 
-            //si el que se libera es mas chico desalojar = 1
+            log_info(logger, "New Estimation for: %s is: %f",
+                un_esi->name, un_esi->cpu_time_estimated);
+            log_info(logger, "New Estimation for: %s is: %f",
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+            if (otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated)		//si el que se libera es mas chico desalojar = 1
+            {
+            	list_add(lista_ready, otro_esi);
+            }
+            else
+            {
+            	list_add(lista_ready, un_esi);
+            }
+
+            
+
+            
                 //agregar a la lista ready un_esi
 
             //ordenar lista ready para que el que se libera quede primero
