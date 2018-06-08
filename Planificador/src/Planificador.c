@@ -431,15 +431,18 @@ void wait_question(int socket)
     switch (header->id)
     {
     	case 31:        //coordinador pregunta por clave bloqueada
-        	char* message = (char*)malloc(header->len + 1);
+        {	
+            char* message = (char*)malloc(header->len + 1);
 
         	recv(socket, message, header->len, 0);
         	message[header->len] = '\0';
 
         	log_info(logger, "Coordinator asked to check Key: %s", message);
         	check_key(message);
-
+            break;
+        }
     	case 32:        //coordinador pide desbloquear clave
+        {
         	char* message = (char*)malloc(header->len + 1);
 
         	recv(socket, message, header->len, 0);
@@ -447,18 +450,22 @@ void wait_question(int socket)
 
         	log_info(logger, "Coordinator asked to store Key: %s", message);
         	unlock_key(message);
-
+            break;
+        }
     	case 33:        //coordinador no pregunta nada (operacion SET)
         	log_info(logger, "Coordinator asked to set a key");
+            break;
 
     	case 34:
         	abort_esi = 1;
+            break;
 
     	case 35:
         	log_info(logger, "All Connected, Initiating Scheduler");
+            break;
 
     	default:
-        	log_error(logger, "Message id not valid: %d", buffer->id);
+        	log_error(logger, "Message id not valid: %d", header->id);
         	exit_with_error(logger, "");
     }
 
