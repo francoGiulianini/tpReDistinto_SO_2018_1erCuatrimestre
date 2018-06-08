@@ -231,7 +231,10 @@ void host_instance(void* arg)
 
     instance = add_instance_to_list(name, socket);
 
-    send(socket, config_instance, sizeof(config_instance_t), 0);
+    config_instance_t* config_aux = malloc(sizeof(config_instance_t));
+    config_aux->number = config_instance->number;
+    config_aux->size = config_instance->size;
+    send(socket, config_aux, sizeof(config_instance_t), 0);
 
     sem_post(&one_instance);
 
@@ -245,33 +248,33 @@ void host_instance(void* arg)
         {
             case GET:
             {    //preguntar si la instancia sigue viva               
-                /*header->id = 13;
-
+                header->id = 13;
+                header->len = strlen(message->key);
+                header->len2 = 0;
                 send(socket, header, sizeof(content_header), 0);
 
-                if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
+                /*if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
                 {    
                     disconnect_socket(socket, true);
 
                     just_disconnected = 1;
                 }
                 else
-                    just_disconnected = 0;
+                    just_disconnected = 0;*/
 
                 send(socket, message->key, strlen(message->key) + 1, 0);
 
                 //esperar confirmacion de la instancia
                 recv(socket, header, sizeof(content_header), 0);    
-                */
 
-                log_info(logger, "Instancia hace GET");
+                log_info(logger, "Instance finished GET");
 
                 sem_post(&result_get);
                 break;
             }
             case SET:
             {
-                /*int length1 = strlen(message->key) + 1;
+                int length1 = strlen(message->key) + 1;
                 int length2 = strlen(message->value) + 1;
 
                 header->id = 12;
@@ -292,9 +295,9 @@ void host_instance(void* arg)
                     disconnect_socket(socket, true);
 
                 process_message_header(header, socket);
-                //free(message_send);*/
+                free(message_send);
 
-                log_info(logger, "Instancia hace SET");
+                log_info(logger, "Instance finished SET");
 
                 sem_post(&result_set);
                 break;
@@ -308,7 +311,7 @@ void host_instance(void* arg)
         }
     }
 
-    //free(header);
+    free(header);
 }
 
 void host_esi(void* arg)
@@ -343,7 +346,7 @@ void host_esi(void* arg)
         process_message_header_esi(header, socket, blocked_keys_by_this_esi, name);
     }
 
-    //free(header);
+    free(header);
 }
 
 void host_scheduler(void* arg)
@@ -423,7 +426,7 @@ void host_scheduler(void* arg)
         ////free(header->id);
         ////free(header->len);
         ////free(header->len2);
-        ////free(header);
+        free(header);
     }
 }
 
