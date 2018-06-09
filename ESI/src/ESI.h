@@ -38,7 +38,7 @@ void get_int_value(t_log* logger, char* key, int *value, t_config* config);
 void get_string_value(t_log* logger, char* key, char* *value, t_config* config);
 int connect_to_server(char * ip, char * port, char * server);
 void send_message(int socket, int id, char * message1, char * message2);
-void send_parsed_operation(t_esi_operacion parsed, bool bloqueado);
+void send_parsed_operation(t_esi_operacion parsed);
 t_esi_operacion parse_line();
 
 

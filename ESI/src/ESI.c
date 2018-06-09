@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
 			exit_with_error(logger, "");
 		}
 		if (!flag_blocked) parsed = parse_line();
-		send_parsed_operation(parsed, &flag_blocked);
+		send_parsed_operation(parsed);
 	}
 
 	free(buffer);
@@ -202,7 +202,7 @@ void send_message(int socket, int id, char * message1, char * message2)
 	}
 }
 
-void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
+void send_parsed_operation(t_esi_operacion parsed)
 {
 	content_header * buffer = (content_header*) malloc(sizeof(content_header));
 	int result;
@@ -245,7 +245,7 @@ void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 			case 23:
 				if(!feof(script))
 				{
-					bloqueado = false;
+					flag_blocked = false;
 					send_message(scheduler_socket, 22, "", "");
 					destruir_operacion(parsed);
 				}
@@ -256,7 +256,7 @@ void send_parsed_operation(t_esi_operacion parsed, bool bloqueado)
 				}
 				break;
 			case 22:
-				bloqueado = true;
+				flag_blocked = true;
 				send_message(scheduler_socket, 23, "", "");
 				break;
 			case 24:
