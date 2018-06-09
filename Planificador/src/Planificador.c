@@ -29,6 +29,7 @@ int main(void)
     sem_init(&esi_respuesta, 0, 0);
     pthread_mutex_init(&pause_mutex, NULL);
     pthread_mutex_init(&new_esi, NULL);
+    pthread_mutex_init(&cola_bloqueados_mutex, NULL);
     lista_ready = list_create();
     lista_bloqueados = list_create();
     claves_bloqueadas_por_esis = list_create();

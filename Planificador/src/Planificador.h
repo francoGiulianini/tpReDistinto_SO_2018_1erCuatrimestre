@@ -71,6 +71,7 @@ t_list * claves_bloqueadas_por_esis;
 t_queue * finished_esis;
 pthread_mutex_t pause_mutex;
 pthread_mutex_t new_esi;
+pthread_mutex_t cola_bloqueados_mutex;
 sem_t hay_esis;
 sem_t esi_executing;
 sem_t coordinador_pregunta;
