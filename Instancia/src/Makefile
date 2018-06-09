@@ -1,4 +1,4 @@
-CFLAGS = -lcommons
+CFLAGS = -lcommons -lpthread
 
 %: %.o
 	$(CC) -o $(*F) $(*F).o $(CFLAGS)
