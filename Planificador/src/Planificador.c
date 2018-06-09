@@ -516,17 +516,16 @@ void check_key(char * key)
     else
     {
         t_esi* one_esi = queue_peek(a_key->cola_esis_bloqueados);
-        if(one_esi != NULL && string_equals_ignore_case(one_esi->name, "CONSOLA"))
-        {
-            //esta bloqueado por clave desde configuracion
-            one_esi = queue_pop(a_key->cola_esis_bloqueados);
-            queue_push(a_key->cola_esis_bloqueados, un_esi);
-        }
         if(queue_is_empty(a_key->cola_esis_bloqueados))
         {
             send_header(socket_c, 31); //31 clave libre
             return;
         }
+        if(one_esi != NULL && string_equals_ignore_case(one_esi->name, "CONSOLA"))
+        {
+            //esta bloqueado por clave desde configuracion
+            one_esi = queue_pop(a_key->cola_esis_bloqueados);
+        }  
         log_warning(logger, "Requested Key was taken before, Adding ESI to blocked queue");
 
         send_header(socket_c, 32); //32 clave bloqueada
@@ -554,36 +553,35 @@ void unlock_key(char* key)
                 otro_esi->name, otro_esi->cpu_time_estimated);
 
             list_add(lista_ready, otro_esi);
-            //hay que reordenar la lista de ready
-
-            //sort_list_by_estimation();  
+            
+            //reordenar la lista de ready
+            sort_list_by_estimation(lista_ready);  
             break;
         }
         case SJFCD:
         {
-            calculate_estimation(un_esi);
+            //calculate_estimation(un_esi);     //creo que no hay que calcular la que esta en ejecucion
             calculate_estimation(otro_esi);		//revisar estimaciones de un_esi y el que se libera
 
-            log_info(logger, "New Estimation for: %s is: %f",
+            log_info(logger, "Estimation for: %s is: %f",
                 un_esi->name, un_esi->cpu_time_estimated);
             log_info(logger, "New Estimation for: %s is: %f",
                 otro_esi->name, otro_esi->cpu_time_estimated);
 
             if (otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated)		//si el que se libera es mas chico desalojar = 1
             {
-            	list_add(lista_ready, otro_esi);
+                //kick_esi = 1;
+            	list_add(lista_ready, un_esi);
+                un_esi = otro_esi;
             }
             else
             {
-            	list_add(lista_ready, un_esi);
+                //agregar a la lista ready otro_esi
+            	list_add(lista_ready, otro_esi);
             }
 
-            
-
-            
-                //agregar a la lista ready un_esi
-
-            //ordenar lista ready para que el que se libera quede primero
+            //ordenar lista ready
+            sort_list_by_estimation(lista_ready);
             break;
         }
         case HRRN:
@@ -592,6 +590,7 @@ void unlock_key(char* key)
             break;
         }
     }
+    sem_post(&hay_esis);
 }
 
 void update_values()
@@ -614,7 +613,7 @@ void update_values()
         case HRRN:
         {
             //se agrega tiempo de espera a los de la lista ready
-            //list_map(t_list*, void*(*transformer)(void*));
+            //list_forEach(t_list*, void*(*transformer)(void*));
             break;
         }
     }
@@ -631,6 +630,19 @@ void calculate_estimation(t_esi* otro_esi)
     float nueva_estimacion = (alpha_a + alpha_b);
 
     otro_esi->cpu_time_estimated = nueva_estimacion;
+}
+
+void sort_list_by_estimation(t_list * lista)
+{
+    bool _lower_than_the_next(t_esi* p, t_esi* q) 
+    {
+        if(p->cpu_time_estimated < q->cpu_time_estimated)
+            return true;
+        else
+            return false;
+    }
+
+    list_sort(lista, _lower_than_the_next);
 }
 
 /*void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key)

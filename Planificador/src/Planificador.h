@@ -91,6 +91,7 @@ void check_key(char* key);
 void unlock_key(char* key);
 void update_values();
 void calculate_estimation(t_esi* otro_esi);
+void sort_list_by_estimation(t_list * lista);
 //void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key);
 void send_esi_to_ready(t_esi * un_esi);
 void finish_esi(t_esi * un_esi);
