@@ -271,7 +271,7 @@ void guardarEnClaves(content_header* header, char* clave)
 
 	map_t* una_clave = (map_t*)malloc(sizeof(map_t));
 	una_clave->clave = malloc(header->lenClave + 1);
-	memcpy(una_clave->clave, clave, header->lenClave);
+	memcpy(una_clave->clave, clave, header->lenClave + 1);
 	una_clave->map = mmap(NULL, FILE_SIZE/*header->lenValor*/, PROT_WRITE, MAP_SHARED, fd, 0);
 	if (una_clave->map == MAP_FAILED) {
 		close(fd);
@@ -339,7 +339,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
-			clave[header->lenClave] = '\0';
+			clave[header->lenClave + 1] = '\0';
 			//revisar si la clave ya existe
 			if(!revisarLista(clave))
 			{
