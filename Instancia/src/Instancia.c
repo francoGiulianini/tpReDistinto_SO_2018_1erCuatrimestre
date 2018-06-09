@@ -16,10 +16,12 @@ char* name;
 int noHayLugar;
 char* mem; //storage
 //char * msjAlCoordinador = "";
+pthread_t hiloCompactar;
+int indexCircular = 0;
 
 int main(void)
 {
-
+	sem_init(&semCompactar,0,0);
 	configure_logger();
 	config = config_create("Config.cfg");
     if(config == NULL)
@@ -31,7 +33,7 @@ int main(void)
 	send(coordinator_socket, name, strlen (name), 0);
 	
 	recibirTamanos();
-	
+
 	/* inicializamos la tabla */
 	entrada_t tabla[configuracion->cantEntradas];
 	for (int i = 0; i <= configuracion->cantEntradas; i++){
@@ -41,6 +43,13 @@ int main(void)
 	lista_claves = list_create();
 	
 	mem = malloc(sizeof (char) *configuracion->cantEntradas*configuracion->tamanioEntradas);
+
+	int error = pthread_create(&hiloCompactar, NULL, (void *)compactar, tabla);
+			if(error != 0)
+			{
+				log_error(logger, "Couldn't create thread Compactar");
+			}
+
 	while(1)
 	{
 		content_header *header = malloc (sizeof (content_header));
@@ -177,9 +186,19 @@ int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
 			for (int j = i; j < i + cantPaginas; j++){
 				lugarVacio = ( string_equals_ignore_case(tabla[i].clave, "vacio") || string_equals_ignore_case(tabla[i].clave, mensaje->clave));
 			}
-			if (lugarVacio) {return i;}
+			
+			if (lugarVacio) {
+				/*if (indexCircular < i + cantPaginas){ 
+					indexCircular = i + cantPaginas;					
+				}*/
+				return i;				
+			}
 		}
 	}
+	/*if (indexCircular >= cantPaginas) {
+					indexCircular = 0;
+					posicion = 0;
+				}*/
 	return -1;
 
 }
@@ -197,6 +216,7 @@ void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
 		memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));
 		//guardar en tabla el tamaño del valor
 	}
+	
 	//actualizar archivo de clave?
 }
 
@@ -268,23 +288,9 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 	switch (header->id){
 		case 11 : {
 			// compactar
-			int clavesVacias = 0;
-			int j = 0;
-			for (int i = 0; i <= configuracion->cantEntradas; i++){
-				if (tabla[i].clave == "vacio"){
-					int clavesVacias = 1;
-					int j = i;
-					while ((tabla[j].clave == "vacio") && (j <= configuracion->cantEntradas)){
-						clavesVacias++;
-						j++;
-					}
-					for (int j = i; j+clavesVacias ; j++){
-						tabla[j].clave == tabla[j+clavesVacias].clave;
-					}
-				
-				}	
-			}
-			// circular (ojo que circular es para reemplazar claves, no para compactar)
+
+			sem_post(&semCompactar);
+			
 			break;
 		}
 
@@ -304,6 +310,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			log_warning(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
 			int posicion = consultarTabla (tabla, mensaje, header->lenValor);	
 
+			// si no Hay Lugar
 			if (noHayLugar){
 				//hay que compactar
 
@@ -376,4 +383,27 @@ map_t * buscar_por_clave(t_list* lista_claves, char* clave)
 	}
 
 	return list_find(lista_claves, _es_esta);
+}
+
+void compactar (entrada_t * tabla){
+
+	sem_wait(&semCompactar);
+
+	int clavesVacias = 0;
+	int j = 0;
+	for (int i = 0; i <= configuracion->cantEntradas; i++){
+		if (tabla[i].clave == "vacio"){
+			int clavesVacias = 1;
+			int j = i;
+			while ((tabla[j].clave == "vacio") && (j <= configuracion->cantEntradas)){
+				clavesVacias++;
+				j++;
+			}
+			for (int j = i; j+clavesVacias ; j++){
+				tabla[j].clave == tabla[j+clavesVacias].clave;
+			}
+		}	
+	}
+
+	//return NULL;
 }

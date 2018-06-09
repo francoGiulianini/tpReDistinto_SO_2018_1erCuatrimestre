@@ -16,6 +16,8 @@
 #include <commons/collections/list.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 #define WELCOME_MSG 8
 #define FILE_SIZE 1024 //en bytes
@@ -57,6 +59,7 @@ t_config * config;
 configuracion_t * configuracion;
 int coordinator_socket;
 t_list* lista_claves;
+sem_t semCompactar;
 
 void configure_logger();
 void exit_with_error(t_log* logger, char* error_message);
@@ -74,5 +77,7 @@ void guardarEnClaves(content_header* header, char* clave);
 void procesarHeader (content_header* header, entrada_t* tabla);
 void send_header(int socket, int id);
 map_t * buscar_por_clave(t_list* lista_claves, char* clave);
+void compactar (entrada_t * tabla);
+
 
 #endif
