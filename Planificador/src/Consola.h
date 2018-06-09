@@ -14,6 +14,7 @@ int stop;
 int blocked_esi_by_console;
 int fin_de_esi;
 pthread_mutex_t pause_mutex;
+pthread_mutex_t cola_bloqueados_mutex;
 t_list * lista_ready;
 t_list * lista_bloqueados;
 
@@ -22,6 +23,7 @@ char * consoleReadArg(char * source, int * i);
 _Commands to_enum(char * source);
 int null_argument(char* arg_console, char* for_logger);
 void block_esi_by_console(char* key, char* id);
+void unlock_key_by_console(char* key);
 void list_blocked_esis(char* resource);
 t_esi * find_by_id(t_list * list, char* id);
 t_esi * find_and_remove_by_id(t_list * list, char* id);

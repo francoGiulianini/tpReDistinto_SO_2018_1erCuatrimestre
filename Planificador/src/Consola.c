@@ -9,7 +9,6 @@ void Console(/*void *parameter*/)
 	char * command;
 	char * key;
 	char * id;
-	char * resource;
 
 	printf("Type 'help' for a list of commands\n");
 	while(exit == 0)
@@ -68,20 +67,20 @@ void Console(/*void *parameter*/)
 				key = consoleReadArg(line, &consoleInputIndex);
 				if(null_argument(key, "<key>"))
 					break;
-
 				log_info(logger, "The Scheduler unlocked the key: %s by command", key);
+				unlock_key_by_console(key);
 				free(key);
 				break;
 			}
 			case LIST:
 			{
 				//mostrar los esi bloqueados por el recurso
-				resource = consoleReadArg(line, &consoleInputIndex);
+				key = consoleReadArg(line, &consoleInputIndex);
 				if(null_argument(key, "<key>"))
 					break;
 
-				list_blocked_esis(resource);
-				free(resource);
+				list_blocked_esis(key);
+				free(key);
 				break;
 			}
 			case KILL:
@@ -210,22 +209,63 @@ void block_esi_by_console(char * key, char * id)
 	pthread_mutex_unlock(&pause_mutex);
 }
 
-void list_blocked_esis(char* resource)
+void unlock_key_by_console(char* key)
 {
-	clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, resource);
+	pthread_mutex_lock(&cola_bloqueados_mutex);
+
+	clave_bloqueada_t* a_key = (clave_bloqueada_t*)malloc(sizeof(clave_bloqueada_t));
+	a_key = find_by_key(lista_bloqueados, key);
 
 	if(a_key == NULL)
 	{
-		log_warning(logger, "Requested Key doesnt exist");
+		printf("Requested Key doesnt exist\n");
+		return;
 	}
 
-	void _log_all_esis(t_esi* an_esi)
+	if(queue_is_empty(a_key->cola_esis_bloqueados))
 	{
-		printf("%s\n", an_esi->name);
+		return;
 	}
 
-	printf("ESIS Blocked waiting for: %s", resource);
-	list_iterate(a_key->cola_esis_bloqueados, _log_all_esis);
+	t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
+	if(string_equals_ignore_case(otro_esi->name, "CONSOLA"))
+		return;
+
+	//OJO CON SJF CON DESALOJO
+	calculate_estimation(otro_esi);
+	list_add(lista_ready, otro_esi);
+
+	sort_list_by_estimation(lista_ready);
+	sem_post(&hay_esis);
+
+	pthread_mutex_unlock(&cola_bloqueados_mutex);
+}
+
+void list_blocked_esis(char* resource)
+{
+	clave_bloqueada_t* a_key = (clave_bloqueada_t*)malloc(sizeof(clave_bloqueada_t));
+	a_key = find_by_key(lista_bloqueados, resource);
+
+	if(a_key == NULL)
+	{
+		printf("Requested Key doesnt exist\n");
+		return;
+	}
+	
+	if(queue_is_empty(a_key->cola_esis_bloqueados))
+	{
+		printf("No ESIs are blocked\n");
+		return;
+	}
+	
+	printf("ESIS Blocked waiting for: %s\n", resource);
+	int cant = queue_size(a_key->cola_esis_bloqueados);
+	for(int i = 1; i <= cant; i++)
+	{
+		t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
+		printf("%s\n", otro_esi->name);
+		queue_push(a_key->cola_esis_bloqueados, otro_esi);
+	}
 }
 
 t_esi * find_by_id(t_list * lista, char* id)
