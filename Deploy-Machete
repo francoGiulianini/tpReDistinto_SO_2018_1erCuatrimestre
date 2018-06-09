@@ -1,0 +1,30 @@
+git clone https://github.com/sisoputnfrba/so-commons-library.git
+cd so-commons..
+sudo make install
+
+//descarga la ultima version del codigo?
+curl -u '[usuario]' -L -o [archivo] [url_repo] 
+curl -u 'gatonprieto' -L -o commons.tar https://api.github.com/repos/sisoputnfrba/so-commons-library/tarball/master
+
+Luego descomprimir con: tar -xvf commons.tar
+
+git clone https://github.com/sisoputnfrba/parsi.git
+cd parsi
+sudo make install
+git clone https://github.com/sisoputnfrba/tp-2018-1c-Los-M-s-Mejores.git
+cd tp..
+make all
+
+git clone https://github.com/sisoputnfrba/Pruebas-ESI.git
+mv ESI_1 ESI/src/
+mv ESI_Largo ESI/src/
+mv ESI_MultiClave ESI/src/
+
+//copia la carpeta a otra vm
+scp -rpC [directorio] [ip]:[directorio] 
+
+//usar putty para ver las terminales de las vms
+
+//para cambiar de nombre a las config del planificador
+mv ConfigPrueba3.cfg Config.cfg
+//no se como usar el editor de texto
