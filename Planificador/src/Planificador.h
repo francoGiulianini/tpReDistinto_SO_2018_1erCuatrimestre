@@ -23,7 +23,7 @@
 #include <semaphore.h>
 
 #define WELCOME_MSG 8
-#define MAX_CLIENTS 2
+#define MAX_CLIENTS 99
 
 typedef enum _Algorithms {SJFSD, SJFCD, HRRN} _Algorithm;
 

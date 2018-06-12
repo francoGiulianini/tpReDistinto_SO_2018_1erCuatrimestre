@@ -84,6 +84,10 @@ int main(void)
             fin_de_esi = 0;
         }
         
+        if(un_esi == NULL)
+        {
+            exit_with_error(logger, "Cannot find ESI");
+        }
         send_header(un_esi->socket, 21); //ejecutar una instruccion
 
         wait_question(socket_c);
