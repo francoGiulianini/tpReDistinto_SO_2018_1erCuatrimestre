@@ -10,8 +10,6 @@
 
 #include "Coordinador.h"
 
-t_config* config;
-pthread_mutex_t lock;
 int error;
 _Operation operation;
 fd_set read_fds;
@@ -34,6 +32,7 @@ int main(void)
     sem_init(&scheduler_response, 0, 0);
     sem_init(&result_get, 0, 0);
     sem_init(&result_set, 0, 0);
+	sem_init(&result_store, 0, 0);
 
     configure_logger();
 
@@ -302,6 +301,23 @@ void host_instance(void* arg)
                 sem_post(&result_set);
                 break;
             }
+			case STORE:
+			{
+				header->id = 14;
+				header->len = strlen(message->key);
+				header->len2 = 0;
+				send(socket, header, sizeof(content_header), 0);
+
+				send(socket, message->key, strlen(message->key) + 1, 0);
+
+				recv(socket, header, sizeof(content_header), 0);
+
+				log_info(logger, "Instance finished STORE");
+
+				sem_post(&result_store);
+
+				break;
+			}
             case STATUS:
                 break;
             default:
@@ -524,7 +540,6 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
         case 23: //ESI pide un STORE
         {
             operation_store(header, socket, blocked_keys, name);
-            log_info(logger, "Instancia hace STORE");
 
             break;
         }
@@ -652,8 +667,27 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
     }
 
     //flag para hilos instancia y planificador
-    operation = STORE;
+	operation = STORE;
+
+	//buscar instancia con la clave y avisarle para que guarde en disco
+	pthread_mutex_lock(&lock);
+	int result = save_on_instance(instances);
+	pthread_mutex_unlock(&lock);
+    
     sem_post(&esi_operation);
+
+	sem_wait(&result_store);
+
+	if (!result)
+	{
+		log_info(logger, "But Instance was not available. Aborting ESI");
+		abort_esi(socket);
+	}
+	else
+	{
+		log_info(logger, "Operation Successful");
+		send_header(socket, 23); //operacion con exito
+	}
     
     dictionary_remove(blocked_keys, message->key);
 
@@ -706,22 +740,35 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
         }
     }
 
+	chosen_one = malloc(sizeof(instance_t));
+
     switch(algorithm)
     {
         case EL:
         {
-            chosen_one = malloc(sizeof(instance_t));
             chosen_one = choose_by_counter(instances);
-
-            log_warning(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
-            dictionary_put(chosen_one->keys, message->key, NULL);
-            
-            sem_post(&chosen_one->start);          
-            sem_wait(&result_get);
 
             break;
         }
+		case LSU:
+		{
+			chosen_one = choose_by_space(instances);
+
+			break;
+		}
+		case KE:
+		{
+			chosen_one = choose_by_letter(instances);
+
+			break;
+		}
     }
+
+	log_warning(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
+	dictionary_put(chosen_one->keys, message->key, NULL);
+
+	sem_post(&chosen_one->start);
+	sem_wait(&result_get);
 }
 
 int save_on_instance(t_list* instances)
@@ -741,6 +788,11 @@ int save_on_instance(t_list* instances)
     }
 }
 
+/*int store_on_instance(t_list* instances)
+{
+	instance_t* chosen_one = find_by_key(instances, message->key);
+}*/
+
 instance_t* add_instance_to_list(char* name, int socket)
 {
     log_info(logger, "Received Instance name: %s", name);
@@ -756,6 +808,8 @@ instance_t* add_instance_to_list(char* name, int socket)
         inst_aux = (instance_t*)malloc(sizeof(instance_t)); 
         inst_aux->name = name;
         inst_aux->space_used = 0;
+		inst_aux->letter_min = 0;
+		inst_aux->letter_max = 0;
         inst_aux->keys = dictionary_create();
         log_info(logger, "New Instance added to list");
     }
@@ -766,7 +820,47 @@ instance_t* add_instance_to_list(char* name, int socket)
 
     list_add(instances, inst_aux);
 
+	if (algorithm == KE)
+		assign_letters();
+
     return inst_aux;
+}
+
+void assign_letters()
+{
+	bool _is_active(instance_t* p)
+	{
+		return p->is_active;
+	}
+
+	int cant_letters = 25;
+
+	int cant_instances = list_count_satisfying(instances, _is_active);
+
+	int letters_to_instances = cant_letters / cant_instances;
+	int rest_letters = cant_letters % cant_instances;
+	int assigned_letters = 0;
+
+	void _assign_letters(instance_t* p)
+	{
+		if (p->is_active)
+		{
+			if (cant_letters < letters_to_instances)
+			{
+				p->letter_min = 65 + assigned_letters;
+				p->letter_max = 65 + assigned_letters + letters_to_instances;
+				log_info(logger, "%s has keys starting from: %c, to: %c", p->name, p->letter_min, p->letter_max);
+				assigned_letters = assigned_letters + letters_to_instances + 1;
+				cant_letters -= letters_to_instances;
+			}
+			else
+			{
+				p->letter_min = 65 + assigned_letters;
+				p->letter_max = 65 + assigned_letters + rest_letters;
+				log_info(logger, "%s has keys starting from: %c, to: %c", p->name, p->letter_min, p->letter_max);
+			}
+		}
+	}
 }
 
 void disconnect_instance_in_list(int socket)
@@ -775,6 +869,12 @@ void disconnect_instance_in_list(int socket)
     if(instance != NULL)
     {
         instance->is_active = 0;
+		instance->letter_min = 0;
+		instance->letter_max = 0;
+
+		if(algorithm == KE)
+			assign_letters();
+
         //pthread_mutex_unlock(&instance->start);
         list_add(instances, instance);
         log_info(logger, "Removed from list of active Instances");
@@ -803,31 +903,6 @@ instance_t* socket_is_equal(t_list* lista, int socket)
     return list_remove_by_condition(lista, _is_the_one);
 }
 
-instance_t* find_by_space_used(t_list* lista)
-{
-    t_list* list_aux = list_create();
-    
-    bool _is_active(instance_t* p) 
-    {
-        if(p->is_active == 1)
-            return true;
-        else
-            return false;
-    }
-    bool _lower_than_the_next(instance_t* p, instance_t* q) 
-    {
-        if(p->space_used < q->space_used)
-            return true;
-        else
-            return false;
-    }
-
-    list_aux = list_filter(lista, _is_active);
-    list_sort(list_aux, _lower_than_the_next);
-
-    return list_get(list_aux, 1);
-}
-
 instance_t* choose_by_counter(t_list* lista)
 {
     int i_max = list_size(lista) - 1;
@@ -845,6 +920,20 @@ instance_t* choose_by_counter(t_list* lista)
     return an_instance;
 }
 
+instance_t* choose_by_letter(t_list* lista)
+{
+	char letter = message->value[0];
+	if (letter >= 97 && letter <= 122) //si esta en minuscula se pasa a mayuscula
+		letter -= 32;
+
+	if (letter == 164 || letter == 165) //si es una Ñ se pasa a N
+		letter = 78;
+
+	instance_t* an_instance = find_by_letter(lista, letter);
+
+	return an_instance;
+}
+
 instance_t* find_by_key(t_list* lista, char* key)
 {
     bool _is_the_one(instance_t* p) 
@@ -853,6 +942,45 @@ instance_t* find_by_key(t_list* lista, char* key)
     }
 
     return list_find(instances, _is_the_one);
+}
+
+instance_t* find_by_space_used(t_list* lista)
+{
+	t_list* list_aux = list_create();
+
+	bool _is_active(instance_t* p)
+	{
+		if (p->is_active == 1)
+			return true;
+		else
+			return false;
+	}
+	bool _lower_than_the_next(instance_t* p, instance_t* q)
+	{
+		if (p->space_used < q->space_used)
+			return true;
+		else
+			return false;
+	}
+
+	list_aux = list_filter(lista, _is_active);
+	list_sort(list_aux, _lower_than_the_next);
+
+	return list_get(list_aux, 1);
+}
+
+instance_t* find_by_letter(t_list* lista, char letter)
+{
+	bool _has_letter(instance_t* p)
+	{
+		if (p->letter_min <= letter && p->letter_max >= letter)
+		{
+			return true;
+		}
+		return false;
+	}
+
+	return list_find(lista, _has_letter);
 }
 
 _Algorithm to_algorithm(char* string)

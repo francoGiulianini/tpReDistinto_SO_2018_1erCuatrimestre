@@ -58,6 +58,8 @@ typedef struct
     int socket;
     int space_used; //para least space used
     int is_active; //para saber si se cayo o no
+	char letter_min;
+	char letter_max; //para key explicit
     sem_t start;
     t_dictionary* keys;
 } instance_t;
@@ -75,6 +77,7 @@ typedef struct
 } thread_data_t;
 
 t_log * logger;
+t_config* config;
 int listeningPort;
 _Algorithm algorithm;
 int delay;
@@ -84,12 +87,14 @@ _Client hello_id;
 t_list * instances;
 message_content* message;
 config_instance_t* config_instance;
+pthread_mutex_t lock;
 sem_t one_instance;
 sem_t one_esi;
 sem_t esi_operation;
 sem_t scheduler_response;
 sem_t result_get;
 sem_t result_set;
+sem_t result_store;
 
 void configure_logger();
 void get_config_values(t_config* config);
@@ -111,12 +116,15 @@ void assign_instance(_Algorithm algorithm, t_list* instances);
 int save_on_instance(t_list* instances);
 void disconnect_socket(int socket, bool is_instance);
 instance_t* add_instance_to_list(char* name, int socket);
+void assign_letters();
 void disconnect_instance_in_list(int socket);
 instance_t* name_is_equal(t_list* lista, char* name);
 instance_t* socket_is_equal(t_list* lista, int socket);
-instance_t* find_by_space_used(t_list* lista);
 instance_t* choose_by_counter(t_list* lista);
+instance_t* choose_by_letter(t_list* lista);
 instance_t* find_by_key(t_list* lista, char* key);
+instance_t* find_by_space_used(t_list* lista);
+instance_t* find_by_letter(t_list* lista, char letter);
 _Algorithm to_algorithm(char* string);
 
 #endif /* COORDINADOR_H_ */
