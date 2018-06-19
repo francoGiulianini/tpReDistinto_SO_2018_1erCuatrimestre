@@ -492,13 +492,24 @@ void wait_start(int socket)
     }
 }
 
+/*
+Funcion: check_key(char* key)
+Descripcion: Verifica si la clave esta bloqueada o no
+Comentarios:
+    1- Busca la clave en la lista de claves bloqueadas
+      1-1 si no existe, la crea
+      1-2 si existe, se fija si la cola de esis esperando esa clave esta vacia
+        1-2-1 si esta vacia, fijarse si un esi tiene la clave
+        1-2-2 si el primer elemento es "CONSOLA" se bloquea
+        1-2-3 si hay esis esperando, se bloquea 
+*/
 void check_key(char * key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
     int key_len = strlen(key) + 1;
     int id_len = strlen(un_esi->name);
 
-	if(a_key == NULL)
+	if(a_key == NULL) //si no encuentra la clave en la lista, la crea
 	{
 		log_warning(logger, "Requested Key doesnt exist, Adding Key to list");
         
@@ -523,6 +534,17 @@ void check_key(char * key)
         t_esi* one_esi = queue_peek(a_key->cola_esis_bloqueados);
         if(queue_is_empty(a_key->cola_esis_bloqueados))
         {
+            /*HACER: fijarse si un esi tiene la clave */
+
+            clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
+            nueva_clave->esi_id = malloc(id_len);
+            memcpy(nueva_clave->esi_id, un_esi->name, id_len);
+            nueva_clave->key = malloc(key_len);
+            memcpy(nueva_clave->key, key, key_len);
+
+            list_add(claves_bloqueadas_por_esis, nueva_clave);
+            /* REPETICION DE CODIGO /\ */
+
             send_header(socket_c, 31); //31 clave libre
             return;
         }
@@ -539,6 +561,11 @@ void check_key(char * key)
     }
 }
 
+/*
+Funcion: unlock_key(char* key)
+Descripcion: Desbloquea a un esi de la cola de bloqueados
+Comentarios: 
+*/
 void unlock_key(char* key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
