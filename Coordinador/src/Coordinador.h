@@ -121,6 +121,7 @@ void disconnect_instance_in_list(int socket);
 instance_t* name_is_equal(t_list* lista, char* name);
 instance_t* socket_is_equal(t_list* lista, int socket);
 instance_t* choose_by_counter(t_list* lista);
+instance_t* choose_by_space(t_list* lista);
 instance_t* choose_by_letter(t_list* lista);
 instance_t* find_by_key(t_list* lista, char* key);
 instance_t* find_by_space_used(t_list* lista);

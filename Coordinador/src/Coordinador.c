@@ -671,7 +671,7 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 
 	//buscar instancia con la clave y avisarle para que guarde en disco
 	pthread_mutex_lock(&lock);
-	int result = save_on_instance(instances);
+	result = save_on_instance(instances);
 	pthread_mutex_unlock(&lock);
     
     sem_post(&esi_operation);
@@ -920,6 +920,13 @@ instance_t* choose_by_counter(t_list* lista)
     return an_instance;
 }
 
+instance_t* choose_by_space(t_list* lista)
+{
+    instance_t* an_instance = find_by_space_used(lista);
+
+    return an_instance;
+}
+
 instance_t* choose_by_letter(t_list* lista)
 {
 	char letter = message->value[0];
@@ -966,7 +973,7 @@ instance_t* find_by_space_used(t_list* lista)
 	list_aux = list_filter(lista, _is_active);
 	list_sort(list_aux, _lower_than_the_next);
 
-	return list_get(list_aux, 1);
+	return list_get(list_aux, 0);
 }
 
 instance_t* find_by_letter(t_list* lista, char letter)
