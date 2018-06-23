@@ -15,9 +15,9 @@ char* ip_c;
 char* name;
 int noHayLugar;
 char* mem; //storage
-//char * msjAlCoordinador = "";
 pthread_t hiloCompactar;
-int indexCircular = 0;
+int indexCircular = 0; // indexCircular se diferencia de posicion en que posicion puede ser menor 
+// que indexCircular si la clave ya existe en la tabla. Si no, son lo mismo
 
 int main(void)
 {
@@ -57,8 +57,6 @@ int main(void)
 		recv(coordinator_socket, header, sizeof (content_header), 0);
 		procesarHeader (header, tabla);
 
-		//free(header->lenClave);
-		//free(header->lenValor);
 		free(header);
 	}
 	return EXIT_SUCCESS;
@@ -120,7 +118,7 @@ int connect_to_server(char * ip, char * port, char *server)
   	hints.ai_family = AF_UNSPEC; 
   	hints.ai_socktype = SOCK_STREAM; 
 
-  	getaddrinfo(ip, port, &hints, &server_info);  // Cambiar IP y PORT por los de archivo de config
+  	getaddrinfo(ip, port, &hints, &server_info);  // Cambiar IP y PORT por los del archivo de config
 
   	int server_socket = socket(server_info->ai_family, server_info->ai_socktype, server_info->ai_protocol);
 
@@ -217,7 +215,7 @@ void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
 		//guardar en tabla el tamaño del valor
 	}
 	
-	//actualizar archivo de clave?
+	//actualizar archivo de clave? Dijeron que no va a hacer falta porque siempre va a ser menor o igual, nunca mayor
 }
 
 void guardarEnMem (content* mensaje, int posicion){
@@ -289,7 +287,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 		case 11 : {
 			// compactar
 
-			sem_post(&semCompactar);
+			compactar();
 			
 			break;
 		}
@@ -317,6 +315,9 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				//msjAlCoordinador = "compactar"
 				send_header(coordinator_socket, 11);
 
+				//recibir del coorddinador
+
+				compactar();
 				//activar semaforo 
 
 				int posicion = consultarTabla (tabla, mensaje, strlen(mensaje->valor));
@@ -350,7 +351,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			//avisar al coordinador que creo el archivo (ID = 12)
 			send_header(coordinator_socket, 12);
 			break;
-			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que leberar los recursos, sepues lo acomodo
+			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que liberar los recursos, depues lo acomodo
 
 			if (munmap(map, content_header->lenValor) == -1) {
 			perror("Error un-mmapping the file");
@@ -359,6 +360,11 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
    			 close(fd);
 			*/
+
+		}
+		case 14:{
+			//STORE
+
 
 		}
 	}
@@ -404,6 +410,4 @@ void compactar (entrada_t * tabla){
 			}
 		}	
 	}
-
-	//return NULL;
 }
