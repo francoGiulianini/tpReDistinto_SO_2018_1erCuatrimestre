@@ -27,6 +27,7 @@ int main(void)
     sem_init(&esi_executing, 0, 0);
     sem_init(&coordinador_pregunta, 0, 0);
     sem_init(&esi_respuesta, 0, 0);
+    pthread_mutex_init(&status_mutex, NULL);
     pthread_mutex_init(&pause_mutex, NULL);
     pthread_mutex_init(&new_esi, NULL);
     pthread_mutex_init(&cola_bloqueados_mutex, NULL);
@@ -72,6 +73,7 @@ int main(void)
 	while (stop != 1)
 	{    
         pthread_mutex_lock(&pause_mutex);
+        pthread_mutex_lock(&status_mutex);
 
         if(fin_de_esi || kick_esi)
         {
@@ -113,6 +115,7 @@ int main(void)
                 fin_de_esi = 1;
         }
 
+        pthread_mutex_unlock(&status_mutex);
         pthread_mutex_unlock(&pause_mutex);
 	}
 
@@ -587,7 +590,7 @@ void unlock_key(char* key)
             list_add(lista_ready, otro_esi);
             
             //reordenar la lista de ready
-            sort_list_by_estimation(lista_ready);  
+            sort_list_by_algorithm(lista_ready);  
             break;
         }
         case SJFCD:
@@ -613,7 +616,7 @@ void unlock_key(char* key)
             }
 
             //ordenar lista ready
-            sort_list_by_estimation(lista_ready);
+            sort_list_by_algorithm(lista_ready);
             break;
         }
         case HRRN:
@@ -664,17 +667,33 @@ void calculate_estimation(t_esi* otro_esi)
     otro_esi->cpu_time_estimated = nueva_estimacion;
 }
 
-void sort_list_by_estimation(t_list * lista)
+void sort_list_by_algorithm(t_list * lista)
 {
-    bool _lower_than_the_next(t_esi* p, t_esi* q) 
+    bool _best_by_algorithm(t_esi* p, t_esi* q) 
     {
-        if(p->cpu_time_estimated < q->cpu_time_estimated)
-            return true;
-        else
-            return false;
+        switch(algorithm){
+            case SJFSD:
+            case SJFCD:
+                if(p->cpu_time_estimated < q->cpu_time_estimated)
+                  return true;
+                else
+                 return false;
+            break;
+            case HRRN:
+                if(response_ratio(p) > response_ratio(q))
+                  return true;
+                else
+                 return false;
+                break;
+        }
     }
 
-    list_sort(lista, _lower_than_the_next);
+    list_sort(lista, _best_by_algorithm);
+}
+
+float response_ratio(t_esi * p)
+{
+    return (p->waiting_time + p->cpu_time_estimated)/p->cpu_time_estimated;
 }
 
 /*void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key)
@@ -685,9 +704,9 @@ void sort_list_by_estimation(t_list * lista)
 void send_esi_to_ready(t_esi * un_esi)
 {
     //agregar a lista ready
-
-    //ordenar lista
-
+    list_add(lista_ready, un_esi);
+    //ordenar lista acorde al algoritmo establecido por consola
+    sort_list_by_algorithm(lista_ready);
     kick_esi = 0;
 }
 
@@ -695,6 +714,7 @@ void finish_esi(t_esi * un_esi)
 {
     //agregar a cola finalizados
     queue_push(finished_esis, un_esi);
+    //liberar todos los recursos tomados por el ESI
 
     abort_esi = 0;
 }

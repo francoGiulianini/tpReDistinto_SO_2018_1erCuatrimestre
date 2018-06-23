@@ -40,6 +40,7 @@ typedef struct
     char* name;
     int instructions_counter;
     float cpu_time_estimated;
+    float waiting_time;
 } t_esi;
 
 typedef struct
@@ -70,6 +71,7 @@ t_list * lista_bloqueados;
 t_list * claves_bloqueadas_por_esis;
 t_queue * finished_esis;
 pthread_mutex_t pause_mutex;
+pthread_mutex_t status_mutex;
 pthread_mutex_t new_esi;
 pthread_mutex_t cola_bloqueados_mutex;
 sem_t hay_esis;
@@ -92,10 +94,11 @@ void check_key(char* key);
 void unlock_key(char* key);
 void update_values();
 void calculate_estimation(t_esi* otro_esi);
-void sort_list_by_estimation(t_list * lista);
+void sort_list_by_algorithm(t_list * lista);
 //void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key);
 void send_esi_to_ready(t_esi * un_esi);
 void finish_esi(t_esi * un_esi);
 _Algorithm to_algorithm(char* string);
+float response_ratio(t_esi * p);
 
 #endif /* PLANIFICADOR_H_ */

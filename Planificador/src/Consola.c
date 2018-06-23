@@ -93,6 +93,7 @@ void Console(/*void *parameter*/)
 			}
 			case STATUS:
 			{
+				pthread_mutex_lock(&pause_mutex);
 				//ver enunciado
 				key = consoleReadArg(line, &consoleInputIndex);
 				log_info(logger, "Status information displayed by command");

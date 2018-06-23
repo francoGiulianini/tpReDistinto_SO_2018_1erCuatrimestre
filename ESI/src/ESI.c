@@ -179,9 +179,10 @@ void send_message(int socket, int id, char * message1, char * message2)
 
 	int result = send(socket, header_c, sizeof(content_header), 0);
 	
-	char * message = malloc(len_message1 + len_message2);
+	char * message = malloc(len_message1 + len_message2 + 1);
 	memcpy(message, message1, len_message1);
 	memcpy(message + len_message1, message2, len_message2);
+	message[len_message1 + len_message2] = '\0';
 
 	free(header_c);
 	
