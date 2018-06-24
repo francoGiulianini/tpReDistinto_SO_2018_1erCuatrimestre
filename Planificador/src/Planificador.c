@@ -98,6 +98,8 @@ int main(void)
 
         update_values();
 
+        //#TODO:
+
         /*if(blocked_esi_by_console)
         {
             blocked_esi_by_console = 0;
@@ -477,6 +479,8 @@ void wait_question(int socket)
         	exit_with_error(logger, "");
     }
 
+    //#TODO:
+
     /*free(header->id);
     free(header->len);
     free(header->len2);
@@ -537,7 +541,7 @@ void check_key(char * key)
         t_esi* one_esi = queue_peek(a_key->cola_esis_bloqueados);
         if(queue_is_empty(a_key->cola_esis_bloqueados))
         {
-            /*HACER: fijarse si un esi tiene la clave */
+            //#TODO: fijarse si un esi tiene la clave
 
             clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
             nueva_clave->esi_id = malloc(id_len);
@@ -590,38 +594,57 @@ void unlock_key(char* key)
             list_add(lista_ready, otro_esi);
             
             //reordenar la lista de ready
-            sort_list_by_algorithm(lista_ready);  
+            sort_list_by_algorithm(lista_ready);
             break;
         }
         case SJFCD:
+        //#TODO: El SJFCD debería:
+
+        /*
+
+        1. Mandar otro_esi a lista_ready,
+        2. Reordenar lista_ready,
+        3. Ver el 1er elemento de lista_ready: otro_esi = list_remove(lista_ready, 0); TAMBIEN se podria hacer otro_esi = lista_ready->head->data;
+        4. Chequear si otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated,
+            4.1 Si es cierto:
+                4.1.1 Mandar un_esi a lista_ready,
+                4.1.2 Reordenar lista_ready,
+                4.1.3 Meter a otro_esi en ejecución, #TODO #DUDA: Como se asigna un ESI a ejecucion?
+            4.2 Si es falso, no hago nada
+
+        */
         {
-            //calculate_estimation(un_esi);     //creo que no hay que calcular la que esta en ejecucion
             calculate_estimation(otro_esi);		//revisar estimaciones de un_esi y el que se libera
 
             log_info(logger, "Estimation for: %s is: %f",
-                un_esi->name, un_esi->cpu_time_estimated);
-            log_info(logger, "New Estimation for: %s is: %f",
                 otro_esi->name, otro_esi->cpu_time_estimated);
+
+            list_add(lista_ready, otro_esi);
+            sort_list_by_algorithm(lista_ready);
+
+            otro_esi = lista_ready->head->data; //Ver el 1er elemento de lista_ready
 
             if (otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated)		//si el que se libera es mas chico desalojar = 1
             {
                 //kick_esi = 1;
+                //#DUDA: si yo activo el flag kick_esi pero dsps digo que un_esi = otro_esi, al retornar me terminaria pateando el ESI que TIENE que ejecutar
             	list_add(lista_ready, un_esi);
-                un_esi = otro_esi;
-            }
-            else
-            {
-                //agregar a la lista ready otro_esi
-            	list_add(lista_ready, otro_esi);
+                sort_list_by_algorithm(lista_ready);
+                un_esi = list_remove(lista_ready, 0); //un_esi siempre es el ESI que se está ejecutando
             }
 
-            //ordenar lista ready
-            sort_list_by_algorithm(lista_ready);
             break;
         }
         case HRRN:
         {
             //no hay desalojo pero el esi desbloqueado tiene espera de 0;
+            calculate_estimation(otro_esi);
+            log_info(logger, "Estimation for: %s is: %f",
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+            otro_esi->waiting_time = 0;
+            list_add(lista_ready, otro_esi);
+            sort_list_by_algorithm(lista_ready);
             break;
         }
     }
@@ -647,8 +670,8 @@ void update_values()
         }
         case HRRN:
         {
-            //se agrega tiempo de espera a los de la lista ready
-            //list_forEach(t_list*, void*(*transformer)(void*));
+            //Se agrega tiempo de espera a los ESI de lista_ready
+            refresh_waiting_time(lista_ready);
             break;
         }
     }
@@ -667,7 +690,7 @@ void calculate_estimation(t_esi* otro_esi)
     otro_esi->cpu_time_estimated = nueva_estimacion;
 }
 
-void sort_list_by_algorithm(t_list * lista)
+void sort_list_by_algorithm(t_list * list)
 {
     bool _best_by_algorithm(t_esi* p, t_esi* q) 
     {
@@ -678,23 +701,23 @@ void sort_list_by_algorithm(t_list * lista)
                   return true;
                 else
                  return false;
-            break;
             case HRRN:
                 if(response_ratio(p) > response_ratio(q))
                   return true;
                 else
                  return false;
-                break;
         }
     }
 
-    list_sort(lista, _best_by_algorithm);
+    list_sort(list, _best_by_algorithm);
 }
 
 float response_ratio(t_esi * p)
 {
     return (p->waiting_time + p->cpu_time_estimated)/p->cpu_time_estimated;
 }
+
+//#TODO:
 
 /*void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key)
 {
@@ -714,7 +737,7 @@ void finish_esi(t_esi * un_esi)
 {
     //agregar a cola finalizados
     queue_push(finished_esis, un_esi);
-    //liberar todos los recursos tomados por el ESI
+    //#TODO: liberar todos los recursos tomados por el ESI
 
     abort_esi = 0;
 }
@@ -729,4 +752,15 @@ _Algorithm to_algorithm(char* string)
         return HRRN;
     log_warning(logger, "Incorrect algorithm type, using default SJF-SD");
     return SJFSD;
+}
+
+void refresh_waiting_time (t_list * list)
+{
+    t_link_element * list_node = list->head;
+
+    for(list_node != NULL)
+    {
+        list_node->data->waiting_time += 1;
+        list_node = list_node->next;
+    }
 }
