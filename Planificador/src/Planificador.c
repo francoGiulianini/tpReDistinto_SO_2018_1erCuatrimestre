@@ -74,17 +74,6 @@ int main(void)
 	{    
         pthread_mutex_lock(&pause_mutex);
         pthread_mutex_lock(&status_mutex);
-
-        if(fin_de_esi || kick_esi)
-        {
-            if(kick_esi)
-                send_esi_to_ready(un_esi);
-            else
-                finish_esi(un_esi);//pregunta si se bloqueo o finalizo o recien empieza
-            sem_wait(&hay_esis);
-            un_esi = list_remove(lista_ready, 0);
-            fin_de_esi = 0;
-        }
         
         if(un_esi == NULL)
         {
@@ -119,6 +108,17 @@ int main(void)
 
         pthread_mutex_unlock(&status_mutex);
         pthread_mutex_unlock(&pause_mutex);
+
+        if(fin_de_esi || kick_esi)
+        {
+            if(kick_esi)
+                send_esi_to_ready(un_esi);
+            else
+                finish_esi(un_esi);//pregunta si se bloqueo o finalizo o recien empieza
+            sem_wait(&hay_esis);
+            un_esi = list_remove(lista_ready, 0);
+            fin_de_esi = 0;
+        }
 	}
 
     pthread_join(idConsole, NULL);
@@ -508,7 +508,7 @@ Comentarios:
       1-2 si existe, se fija si la cola de esis esperando esa clave esta vacia
         1-2-1 si esta vacia, fijarse si un esi tiene la clave
         1-2-2 si el primer elemento es "CONSOLA" se bloquea
-        1-2-3 si hay esis esperando, se bloquea 
+        //**1-2-3 si hay esis esperando, se bloquea <-- MAL**
 */
 void check_key(char * key)
 {
@@ -538,10 +538,10 @@ void check_key(char * key)
 	}
     else
     {
-        t_esi* one_esi = queue_peek(a_key->cola_esis_bloqueados);
-        if(queue_is_empty(a_key->cola_esis_bloqueados))
+        if(queue_is_empty(a_key->cola_esis_bloqueados)) //la lista esta vacia
         {
             //#TODO: fijarse si un esi tiene la clave
+            // usando lista claves_bloqueadas_por_esis
 
             clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
             nueva_clave->esi_id = malloc(id_len);
@@ -555,11 +555,20 @@ void check_key(char * key)
             send_header(socket_c, 31); //31 clave libre
             return;
         }
+
+        t_esi* one_esi = queue_peek(a_key->cola_esis_bloqueados);
         if(one_esi != NULL && string_equals_ignore_case(one_esi->name, "CONSOLA"))
         {
+            //el primer elemento es CONSOLA
             //esta bloqueado por clave desde configuracion
             one_esi = queue_pop(a_key->cola_esis_bloqueados);
-        }  
+        }
+
+        //la lista tiene elementos pero pudo haber sido desbloqueada por consola
+
+        //#TODO: fijarse si un esi tiene la clave
+        // usando lista claves_bloqueadas_por_esis 
+
         log_warning(logger, "Requested Key was taken before, Adding ESI to blocked queue");
 
         send_header(socket_c, 32); //32 clave bloqueada
@@ -756,11 +765,17 @@ _Algorithm to_algorithm(char* string)
 
 void refresh_waiting_time (t_list * list)
 {
-    t_link_element * list_node = list->head;
+    /*t_link_element * list_node = list->head;
 
     for(list_node != NULL)
     {
         list_node->data->waiting_time += 1;
         list_node = list_node->next;
+    }*/
+    void _increase_time(t_esi* p)
+    {
+        p->waiting_time += 1;
     }
+
+    list_iterate(lista_ready, _increase_time);
 }
