@@ -224,6 +224,7 @@ void host_instance(void* arg)
         exit_with_error(logger,"Cannot recieve message");
     if(result == 0)
         disconnect_socket(socket, true);
+    name[len] = '\0';
 
     instance_t * instance;
     instance = malloc(sizeof(instance_t));
