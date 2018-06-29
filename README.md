@@ -25,6 +25,9 @@ ID headers:(se le envian)(ID+TamañoMensaje)
   		-30: hola soy el planificador
   		-31: clave esta libre
   		-32: clave no esta libre
+		-33: planificador pide STATUS
+		-34: ESI tiene la clave tomada (para poder hacer SET)
+		-35: ESI no tiene la clave tomada
 
 
  * -Planificador:
