@@ -65,7 +65,7 @@ int main(void)
     sem_wait(&hay_esis);
     wait_start(socket_c); //espera que le manden un id 35
 
-    t_esi un_esi;
+    t_esi * un_esi;
 
     pthread_mutex_lock(&new_esi);
     un_esi = list_remove(lista_ready, 0);
