@@ -18,7 +18,8 @@ int fin_de_esi = 0;
 int respuesta_ok = 1;
 int key_blocked = 0;
 int abort_esi = 0;
-int kick_esi = 0;
+/* int kick_esi = 0; #DUDA	No creo que sea necesario este flag, xq creo que hasta complica mas que facilitar las cosas,
+							sobre todo debido al chequeo en el while del main. Es mejor que todo ese comportamiento lo tenga unlock_key */
 
 int main(void)
 {
@@ -64,7 +65,8 @@ int main(void)
     sem_wait(&hay_esis);
     wait_start(socket_c); //espera que le manden un id 35
 
-    un_esi = malloc(sizeof(t_esi));
+    t_esi un_esi;
+
     pthread_mutex_lock(&new_esi);
     un_esi = list_remove(lista_ready, 0);
     pthread_mutex_unlock(&new_esi);
@@ -109,12 +111,12 @@ int main(void)
         pthread_mutex_unlock(&status_mutex);
         pthread_mutex_unlock(&pause_mutex);
 
-        if(fin_de_esi || kick_esi)
+        if(fin_de_esi /*|| kick_esi*/)
         {
-            if(kick_esi)
+           /*if(kick_esi)	//#DUDA siempre que se hace kick_esi, debe entrar otro ESI, asi que en realidad mas que send_esi_to_ready, deberia tambien mandar otro_esi a ejecucion
                 send_esi_to_ready(un_esi);
             else
-                finish_esi(un_esi);//pregunta si se bloqueo o finalizo o recien empieza
+                */finish_esi(un_esi);//pregunta si se bloqueo o finalizo o recien empieza
             sem_wait(&hay_esis);
             un_esi = list_remove(lista_ready, 0);
             fin_de_esi = 0;
@@ -179,7 +181,7 @@ void configure_logger()
     logger = log_create("Planificador.log", "Planificador", true, LOG_LEVEL_INFO);
 }
 
-void new_blocked_keys()
+void new_blocked_keys()		//#DUDA Me hace mucho ruido el funcionamiento de esto, y los malloc con el for, cuando se liberan?
 {
     char** blocked_keys = config_get_array_value(config, "ClavesBloqueadas");
 
@@ -189,8 +191,7 @@ void new_blocked_keys()
 
         clave_bloqueada->cola_esis_bloqueados = queue_create();
         t_esi* one_esi = malloc(sizeof(t_esi));
-        one_esi->name = malloc(8);
-        strcpy(one_esi->name, "CONSOLA");
+        one_esi->name = "CONSOLA";
         queue_push(clave_bloqueada->cola_esis_bloqueados, one_esi);
         clave_bloqueada->key = blocked_keys[i];
 
@@ -355,6 +356,9 @@ void HostConnections()
                         log_info(logger, "New ESI added to the queue as %s", a_new_esi->name);
                         log_info(logger, "Estimation: %f", a_new_esi->cpu_time_estimated);
                         sem_post(&hay_esis);
+
+                        free(name);
+                        free(a_new_esi);
                     }
 
                     if(header->id == 22)
@@ -376,7 +380,10 @@ void HostConnections()
                         abort_esi = 1;
                         sem_post(&esi_respuesta);
                     }
-                }  
+                }
+
+            	free(header);
+
             }  
         }
 	}
@@ -429,6 +436,7 @@ void send_header(int socket, int id)
     header->len2 = 0;
     
     send(socket, header, sizeof(content_header), 0);
+    free(header);
 }
 
 void wait_question(int socket)
@@ -449,6 +457,7 @@ void wait_question(int socket)
 
         	log_info(logger, "Coordinator asked to check Key: %s", message);
         	check_key(message);
+        	free(message);
             break;
         }
     	case 32:        //coordinador pide desbloquear clave
@@ -460,6 +469,7 @@ void wait_question(int socket)
 
         	log_info(logger, "Coordinator asked to store Key: %s", message);
         	unlock_key(message);
+        	free(message);
             break;
         }
     	case 33:        //coordinador no pregunta nada (operacion SET)
@@ -479,12 +489,7 @@ void wait_question(int socket)
         	exit_with_error(logger, "");
     }
 
-    //#TODO:
-
-    /*free(header->id);
-    free(header->len);
-    free(header->len2);
-    free(header);*/
+    free(header);
 }
 
 void wait_start(int socket)
@@ -497,6 +502,8 @@ void wait_start(int socket)
     {
         log_info(logger, "All Connected, Initiating Scheduler");
     }
+
+    free(header);
 }
 
 /*
@@ -520,21 +527,19 @@ void check_key(char * key)
 	{
 		log_warning(logger, "Requested Key doesnt exist, Adding Key to list");
         
-        a_key = malloc(sizeof(clave_bloqueada_t));
         a_key->key = key;
         a_key->cola_esis_bloqueados = queue_create();
 
         list_add(lista_bloqueados, a_key);
 
         clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
-        nueva_clave->esi_id = malloc(id_len);
-        memcpy(nueva_clave->esi_id, un_esi->name, id_len);
-        nueva_clave->key = malloc(key_len);
-        memcpy(nueva_clave->key, key, key_len);
+        nueva_clave->esi_id = un_esi->name;
+        nueva_clave->key = key;
 
         list_add(claves_bloqueadas_por_esis, nueva_clave);
 
         send_header(socket_c, 31); //31 clave libre
+        free(nueva_clave);
 	}
     else
     {
@@ -544,15 +549,14 @@ void check_key(char * key)
             // usando lista claves_bloqueadas_por_esis
 
             clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
-            nueva_clave->esi_id = malloc(id_len);
-            memcpy(nueva_clave->esi_id, un_esi->name, id_len);
-            nueva_clave->key = malloc(key_len);
-            memcpy(nueva_clave->key, key, key_len);
+            nueva_clave->esi_id = un_esi->name;
+            nueva_clave->key = key;
 
             list_add(claves_bloqueadas_por_esis, nueva_clave);
             /* REPETICION DE CODIGO /\ */
 
             send_header(socket_c, 31); //31 clave libre
+            free(nueva_clave);
             return;
         }
 
@@ -565,7 +569,7 @@ void check_key(char * key)
         }
 
         //la lista tiene elementos pero pudo haber sido desbloqueada por consola
-
+        //#TODO: asegurarse de que todos los malloc tengan free
         //#TODO: fijarse si un esi tiene la clave
         // usando lista claves_bloqueadas_por_esis 
 
@@ -603,23 +607,21 @@ void unlock_key(char* key)
             list_add(lista_ready, otro_esi);
             
             //reordenar la lista de ready
-            sort_list_by_algorithm(lista_ready);
+            
             break;
         }
-        case SJFCD:
+        case SJFCD: //Precondicion: Asumo que no existe ESI en la cola de ready con rafaga mas corta que un_esi, por lo tanto:
         //#TODO: El SJFCD debería:
 
         /*
-
-        1. Mandar otro_esi a lista_ready,
-        2. Reordenar lista_ready,
-        3. Ver el 1er elemento de lista_ready: otro_esi = list_remove(lista_ready, 0); TAMBIEN se podria hacer otro_esi = lista_ready->head->data;
-        4. Chequear si otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated,
-            4.1 Si es cierto:
-                4.1.1 Mandar un_esi a lista_ready,
-                4.1.2 Reordenar lista_ready,
-                4.1.3 Meter a otro_esi en ejecución, #TODO #DUDA: Como se asigna un ESI a ejecucion?
-            4.2 Si es falso, no hago nada
+        
+        1. calcular estimacion del otro_esi
+        2. Chequear si otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated,
+            2.1 Si es cierto:
+                2.1.1 Mandar un_esi a lista_ready,
+                2.1.2 Meter a otro_esi en ejecución, #TODO #DUDA: Como se asigna un ESI a ejecucion?
+            2.2 Si es falso:
+            	2.2.1 Mandar otro_esi a lista_ready,
 
         */
         {
@@ -628,19 +630,20 @@ void unlock_key(char* key)
             log_info(logger, "Estimation for: %s is: %f",
                 otro_esi->name, otro_esi->cpu_time_estimated);
 
-            list_add(lista_ready, otro_esi);
-            sort_list_by_algorithm(lista_ready);
-
-            otro_esi = lista_ready->head->data; //Ver el 1er elemento de lista_ready
 
             if (otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated)		//si el que se libera es mas chico desalojar = 1
             {
                 //kick_esi = 1;
                 //#DUDA: si yo activo el flag kick_esi pero dsps digo que un_esi = otro_esi, al retornar me terminaria pateando el ESI que TIENE que ejecutar
             	list_add(lista_ready, un_esi);
-                sort_list_by_algorithm(lista_ready);
-                un_esi = list_remove(lista_ready, 0); //un_esi siempre es el ESI que se está ejecutando
+                un_esi = otro_esi; //un_esi siempre es el ESI que se está ejecutando
             }
+            else
+            {
+            	list_add(lista_ready, otro_esi);
+            }
+
+            
 
             break;
         }
@@ -653,10 +656,11 @@ void unlock_key(char* key)
 
             otro_esi->waiting_time = 0;
             list_add(lista_ready, otro_esi);
-            sort_list_by_algorithm(lista_ready);
+            
             break;
         }
     }
+    sort_list_by_algorithm(lista_ready);		//Independientemente de los casos, reordeno lista_ready
     sem_post(&hay_esis);
 }
 
@@ -686,17 +690,17 @@ void update_values()
     }
 }
 
-void calculate_estimation(t_esi* otro_esi)
+void calculate_estimation(t_esi* esi_a_estimar)
 {
-    int i = otro_esi->instructions_counter;
-    int cpu = otro_esi->cpu_time_estimated;
+    int i = esi_a_estimar->instructions_counter;
+    int cpu = esi_a_estimar->cpu_time_estimated;
 
     float alpha_a = (((float)alpha / 100) * i);
     float alpha_b = (1 - ((float)alpha / 100)) * cpu;
 
     float nueva_estimacion = (alpha_a + alpha_b);
 
-    otro_esi->cpu_time_estimated = nueva_estimacion;
+    esi_a_estimar->cpu_time_estimated = nueva_estimacion;
 }
 
 void sort_list_by_algorithm(t_list * list)
@@ -739,7 +743,7 @@ void send_esi_to_ready(t_esi * un_esi)
     list_add(lista_ready, un_esi);
     //ordenar lista acorde al algoritmo establecido por consola
     sort_list_by_algorithm(lista_ready);
-    kick_esi = 0;
+    //kick_esi = 0;
 }
 
 void finish_esi(t_esi * un_esi)
