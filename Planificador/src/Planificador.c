@@ -65,8 +65,6 @@ int main(void)
     sem_wait(&hay_esis);
     wait_start(socket_c); //espera que le manden un id 35
 
-    t_esi * un_esi;
-
     pthread_mutex_lock(&new_esi);
     un_esi = list_remove(lista_ready, 0);
     pthread_mutex_unlock(&new_esi);
@@ -344,7 +342,8 @@ void HostConnections()
                             sprintf(name, "ESI%d", num_esi);
 
                         a_new_esi->socket = sd;
-                        a_new_esi->name = name;
+                        a_new_esi->name = (char*)malloc(7);
+                        strcpy(a_new_esi->name, name);
                         a_new_esi->instructions_counter = 0;
                         a_new_esi->cpu_time_estimated = (float)initial_estimation;
                     
@@ -358,7 +357,8 @@ void HostConnections()
                         sem_post(&hay_esis);
 
                         free(name);
-                        free(a_new_esi);
+                        //#DUDA_RESPUESTA: este free hace que se pierda la referencia del esi
+                        //free(a_new_esi);
                     }
 
                     if(header->id == 22)
@@ -446,30 +446,26 @@ void wait_question(int socket)
     recv(socket, header, sizeof(content_header), 0);
     log_info(logger, "Received header id: %d", header->id);
 
+    char* message = (char*)malloc(header->len + 1);
+
     switch (header->id)
     {
     	case 31:        //coordinador pregunta por clave bloqueada
-        {	
-            char* message = (char*)malloc(header->len + 1);
-
+        {	            
         	recv(socket, message, header->len, 0);
         	message[header->len] = '\0';
 
         	log_info(logger, "Coordinator asked to check Key: %s", message);
         	check_key(message);
-        	free(message);
             break;
         }
     	case 32:        //coordinador pide desbloquear clave
         {
-        	char* message = (char*)malloc(header->len + 1);
-
         	recv(socket, message, header->len, 0);
         	message[header->len] = '\0';
 
         	log_info(logger, "Coordinator asked to store Key: %s", message);
         	unlock_key(message);
-        	free(message);
             break;
         }
     	case 33:        //coordinador no pregunta nada (operacion SET)
@@ -489,6 +485,7 @@ void wait_question(int socket)
         	exit_with_error(logger, "");
     }
 
+    free(message);//#DUDA: este free tira segmentation fault para la segunda vez
     free(header);
 }
 
@@ -527,6 +524,8 @@ void check_key(char * key)
 	{
 		log_warning(logger, "Requested Key doesnt exist, Adding Key to list");
         
+        //#DUDA_RESPUESTA: como a_key es NULL hay que creala haciendo malloc
+        a_key = malloc(sizeof(clave_bloqueada_t));
         a_key->key = key;
         a_key->cola_esis_bloqueados = queue_create();
 
@@ -534,11 +533,13 @@ void check_key(char * key)
 
         clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
         nueva_clave->esi_id = un_esi->name;
+        //OJO que key es una variable local, se pierde la referencia al terminar
         nueva_clave->key = key;
 
         list_add(claves_bloqueadas_por_esis, nueva_clave);
 
         send_header(socket_c, 31); //31 clave libre
+        
         free(nueva_clave);
 	}
     else
@@ -570,7 +571,7 @@ void check_key(char * key)
 
         //la lista tiene elementos pero pudo haber sido desbloqueada por consola
         //#TODO: asegurarse de que todos los malloc tengan free
-        //#TODO: fijarse si un esi tiene la clave
+        //#TODO: fijarse si un esi tiene la clave(ver esi_has_key() esta en la rama fix_operacion_set)
         // usando lista claves_bloqueadas_por_esis 
 
         log_warning(logger, "Requested Key was taken before, Adding ESI to blocked queue");
