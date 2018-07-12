@@ -45,6 +45,7 @@ typedef struct
 {
     char clave[40];
     int tamanio;
+	int age;
 } entrada_t;
 
 typedef struct
@@ -78,6 +79,11 @@ void procesarHeader (content_header* header, entrada_t* tabla);
 void send_header(int socket, int id);
 map_t * buscar_por_clave(t_list* lista_claves, char* clave);
 void compactar (entrada_t * tabla);
+int getCantPaginas (int tamanioMensaje );
+int consultarTablaCIRC (entrada_t* tabla, content* mensaje);
+int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja);
+void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas);
+void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja);
 
 
 #endif

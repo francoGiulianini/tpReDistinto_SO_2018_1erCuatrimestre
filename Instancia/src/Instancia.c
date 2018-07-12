@@ -13,11 +13,15 @@
 char* port_c;
 char* ip_c;
 char* name;
+char* algReemplazo;
+char* dump;
 int noHayLugar;
 char* mem; //storage
 pthread_t hiloCompactar;
-int indexCircular = 0; // indexCircular se diferencia de posicion en que posicion puede ser menor 
-// que indexCircular si la clave ya existe en la tabla. Si no, son lo mismo
+int indexCircular = 0;
+int comienzoDeEntradasLibres = 0;
+int flagCompactar = 0;
+int clockSimulator = 0;
 
 int main(void)
 {
@@ -38,6 +42,7 @@ int main(void)
 	entrada_t tabla[configuracion->cantEntradas];
 	for (int i = 0; i <= configuracion->cantEntradas; i++){
 		strcpy(tabla[i].clave, "vacio");
+		tabla[i].age = 0;
 	}
 
 	lista_claves = list_create();
@@ -79,6 +84,8 @@ void get_values_from_config(t_log* logger, t_config* config)
     get_string_value(logger, "PuertoCoordinador", &port_c, config);
     get_string_value(logger, "IPCoordinador", &ip_c, config);
 	get_string_value(logger, "NombreInstancia", &name, config);
+	get_string_value(logger, "AlgoritmoReemplazo", &algReemplazo, config);
+	get_int_value(logger, "IntervaloDump", &dump, config);
 }
 
 void get_int_value(t_log* logger, char* key, int *value, t_config* config)
@@ -166,50 +173,43 @@ void recibirTamanos ()
 	log_info(logger, "Received Size of Entries: %d", configuracion->tamanioEntradas);
 }
 
-int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje){
-
-	int cantPaginas = 0;
-	int lugarVacio = 0;
-
-	//deberia fijarse si la clave ya existe en la tabla
-	//y devolver esa posicion
-
-	if (tamanioMensaje % configuracion->tamanioEntradas == 0){
-		cantPaginas = tamanioMensaje / configuracion->tamanioEntradas;
-	} else{
-		cantPaginas = (tamanioMensaje / configuracion->tamanioEntradas) + 1;
-	}
-	for (int i = 0; i <= configuracion->cantEntradas; i++){
-		if ((lugarVacio = string_equals_ignore_case(tabla[i].clave, "vacio")) || string_equals_ignore_case(tabla[i].clave, mensaje->clave)){
-			for (int j = i; j < i + cantPaginas; j++){
-				lugarVacio = ( string_equals_ignore_case(tabla[i].clave, "vacio") || string_equals_ignore_case(tabla[i].clave, mensaje->clave));
-			}
-			
-			if (lugarVacio) {
-				/*if (indexCircular < i + cantPaginas){ 
-					indexCircular = i + cantPaginas;					
-				}*/
-				return i;				
-			}
+int consultarTablaCIRC (entrada_t* tabla, content* mensaje){
+// Se fija si la clave ya existe en la tabla devuelve esa posicion
+	
+	for (int i = 0; i <= comienzoDeEntradasLibres; i++){
+		
+		if (string_equals_ignore_case(tabla[i].clave, mensaje->clave)){
+			return i;
 		}
 	}
-	/*if (indexCircular >= cantPaginas) {
-					indexCircular = 0;
-					posicion = 0;
-				}*/
-	return -1;
-
+	return -1; // Si la clave no esta en la tabla
 }
+				
+int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja){
+// Va envejeciendo todo por el camino (de punta a punta). Si la clave existe devuelve su posicion
+// Si la clave no existe eventualmente se puede pisar la clave con mayor edad (en otra funcion)
+		
+	for (int i = 0; i <= comienzoDeEntradasLibres; i++){
+		
+		laMasVieja = 0;
+		tabla[i].age++;
+		if (laMasVieja < tabla[i].age) {
+			laMasVieja = tabla[i].age;
+		}
+		
+		if (string_equals_ignore_case(tabla[i].clave, mensaje->clave)){
+			return i;
+		}		
+	}
+	return -1; // Si la clave no esta en la tabla
+}	
 
+/*
 void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
 
 	int cantPaginas = 0;
 	int tamanioMensaje = strlen(mensaje->clave);
-	if (tamanioMensaje % configuracion->tamanioEntradas == 0){
-		cantPaginas = tamanioMensaje / configuracion->tamanioEntradas;
-	} else{
-		cantPaginas = (tamanioMensaje / configuracion->tamanioEntradas) + 1;
-	}
+	cantPaginas = getCantPaginas (tamanioMensaje);
 	for (int i = posicion; i <= cantPaginas; i++){
 		memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));
 		//guardar en tabla el tamaño del valor
@@ -217,6 +217,7 @@ void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
 	
 	//actualizar archivo de clave? Dijeron que no va a hacer falta porque siempre va a ser menor o igual, nunca mayor
 }
+*/
 
 void guardarEnMem (content* mensaje, int posicion){
 	int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
@@ -283,11 +284,12 @@ void guardarEnClaves(content_header* header, char* clave)
 }
 
 void procesarHeader (content_header* header, entrada_t* tabla){
+	
 	switch (header->id){
 		case 11 : {
 			// compactar
 
-			compactar();
+			compactar(tabla);
 			
 			break;
 		}
@@ -306,7 +308,47 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			mensaje->valor[header->lenValor] = '\0';
 
 			log_warning(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
-			int posicion = consultarTabla (tabla, mensaje, header->lenValor);	
+
+			int cantPaginas = 0;
+			int tamanioMensaje = strlen(mensaje->clave);
+			
+			if (algReemplazo == "CIRC"){
+				
+				cantPaginas = getCantPaginas (tamanioMensaje);
+				// recorro la tabla hasta el comienzoDeEntradasLibres
+				int posicion = consultarTablaCIRC (tabla, mensaje);
+				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
+					int e = posicion + cantPaginas;
+					while (tabla[e].clave == mensaje->clave){
+						strcpy(tabla[e].clave, "vacio");
+					}
+					guardarEnMem (mensaje, posicion);
+				} else { // Si la clave no esta en la tabla
+					guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
+				}
+				
+			} else if (algReemplazo == "LRU"){
+				
+				int laMasVieja = 0;
+				cantPaginas = getCantPaginas (tamanioMensaje);
+				// recorro la tabla de punta a punta envejeciendo todo y actualizo el valor de laMasVieja
+				int posicion = consultarTablaLRU (tabla, mensaje, &laMasVieja);
+				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
+					int e = posicion + cantPaginas;
+					while (tabla[e].clave == mensaje->clave){
+						strcpy(tabla[e].clave, "vacio");
+						tabla[e].age = 0;
+					}
+					guardarEnMem (mensaje, posicion);
+				} else { // Si la clave no esta en la tabla
+					guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
+				}						
+				
+			}
+			
+			///////// DESDE ACA ///////////////
+			/*
+				
 
 			// si no Hay Lugar
 			if (noHayLugar){
@@ -323,9 +365,14 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				int posicion = consultarTabla (tabla, mensaje, strlen(mensaje->valor));
 
 			}
-
+			
 			guardarEnTabla (tabla, mensaje, posicion);
-			guardarEnMem (mensaje, posicion);
+			
+			*/
+			/////////// HASTA ACA ////////////////////
+
+			
+			//guardarEnMem (mensaje, posicion);
 
 			//msjAlCoordinador = "SET_OK"
 			send_header(coordinator_socket, 12);
@@ -334,6 +381,10 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			break;
 		}
 		case 13:{ //GET
+			// Intenta bloquear la clave y si no existe la crea (la agrega a la tabla).
+
+		}
+		case 14:{ // STORE
 			//crear archivo con la clave que tenga la posicion en la tabla y el valor
 			//ver mmap
 			char * clave = (char*)malloc (header->lenClave + 1);
@@ -352,23 +403,18 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			send_header(coordinator_socket, 12);
 			break;
 			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que liberar los recursos, depues lo acomodo
-
 			if (munmap(map, content_header->lenValor) == -1) {
 			perror("Error un-mmapping the file");
-
 			}
-
    			 close(fd);
 			*/
-
-		}
-		case 14:{
-			//STORE
-
-
 		}
 	}
-
+	
+	clockSimulator++;
+	if (clockSimulator == dump){
+		// hacer el dump 
+	}
 }
 
 void send_header(int socket, int id)
@@ -399,7 +445,7 @@ void compactar (entrada_t * tabla){
 	int j = 0;
 	for (int i = 0; i <= configuracion->cantEntradas; i++){
 		if (tabla[i].clave == "vacio"){
-			int clavesVacias = 1;
+			//int clavesVacias = 1;
 			int j = i;
 			while ((tabla[j].clave == "vacio") && (j <= configuracion->cantEntradas)){
 				clavesVacias++;
@@ -410,4 +456,76 @@ void compactar (entrada_t * tabla){
 			}
 		}	
 	}
+	// Una vez que se compacto, se actualiza el comienzoDeEntradasLibres
+	int e = 0;
+	for (e = 0; tabla[e].clave!= "vacio"; e++){		
+	}
+	comienzoDeEntradasLibres = e;
+}
+
+int getCantPaginas (int tamanioMensaje ){
+	int cantPaginas = 0;
+	if (tamanioMensaje % configuracion->tamanioEntradas == 0){
+		cantPaginas = tamanioMensaje / configuracion->tamanioEntradas;
+	} else{
+		cantPaginas = (tamanioMensaje / configuracion->tamanioEntradas) + 1;
+	}
+	return cantPaginas;
+}
+
+void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
+	
+	if (flagCompactar = 0){
+		if (configuracion->cantEntradas - comienzoDeEntradasLibres >= cantPaginas){ 
+		// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
+			
+			for (int i = comienzoDeEntradasLibres; i <= cantPaginas; i++){
+				//guardar en tabla el tamaño del valor
+				memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));				
+				guardarEnMem(mensaje, &comienzoDeEntradasLibres);
+			}
+			comienzoDeEntradasLibres = comienzoDeEntradasLibres + cantPaginas;
+			indexCircular = comienzoDeEntradasLibres;
+	} else {
+	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio
+	
+		
+			compactar(tabla);
+			indexCircular = 0;
+		}
+		
+		guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
+						
+	}
+}
+
+void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja){
+	
+	if (configuracion->cantEntradas - comienzoDeEntradasLibres >= cantPaginas){ 
+	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
+		
+		for (int i = comienzoDeEntradasLibres; i <= cantPaginas; i++){
+			//guardar en tabla el tamaño del valor
+			memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));			
+			guardarEnMem(mensaje, &comienzoDeEntradasLibres);
+		}	
+		comienzoDeEntradasLibres = comienzoDeEntradasLibres + cantPaginas;
+	} else {
+	// Si no hay suficiente lugar libre: Se libera la entrada LRU y si fuera necesario, se compacta.
+		for (int i = 0; i <= comienzoDeEntradasLibres; i++){
+			int auxLaMasVieja = 0;
+			laMasVieja = 0;
+			if (auxLaMasVieja < tabla[i].age && tabla[i].age < laMasVieja) {
+				auxLaMasVieja = tabla[i].age;
+			}
+			if (tabla[i].age == laMasVieja){
+				strcpy(tabla[i].clave, "vacio");
+				tabla[i].age = 0;
+			}
+			laMasVieja = auxLaMasVieja;
+			compactar(tabla);
+			guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
+		}				
+	}
+		
 }
