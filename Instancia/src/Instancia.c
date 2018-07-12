@@ -286,8 +286,7 @@ void guardarEnClaves(content_header* header, char* clave)
 void procesarHeader (content_header* header, entrada_t* tabla){
 	
 	switch (header->id){
-		case 11 : {
-			// compactar
+		case 11 : { // compactar			
 
 			compactar(tabla);
 			
@@ -429,8 +428,7 @@ void send_header(int socket, int id)
 
 map_t * buscar_por_clave(t_list* lista_claves, char* clave)
 {
-	bool _es_esta(map_t* p)
-	{
+	bool _es_esta(map_t* p){
 		return string_equals_ignore_case(p->clave, clave);
 	}
 
@@ -461,6 +459,7 @@ void compactar (entrada_t * tabla){
 	for (e = 0; tabla[e].clave!= "vacio"; e++){		
 	}
 	comienzoDeEntradasLibres = e;
+	indexCircular = e;
 }
 
 int getCantPaginas (int tamanioMensaje ){
@@ -474,28 +473,35 @@ int getCantPaginas (int tamanioMensaje ){
 }
 
 void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
+
+	// OJO! REVISAR, ES MUY TARDE Y ESTOY MEDIO TARADO YA...
 	
-	if (flagCompactar = 0){
-		if (configuracion->cantEntradas - comienzoDeEntradasLibres >= cantPaginas){ 
-		// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
-			
-			for (int i = comienzoDeEntradasLibres; i <= cantPaginas; i++){
-				//guardar en tabla el tamaño del valor
-				memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));				
-				guardarEnMem(mensaje, &comienzoDeEntradasLibres);
-			}
-			comienzoDeEntradasLibres = comienzoDeEntradasLibres + cantPaginas;
-			indexCircular = comienzoDeEntradasLibres;
-	} else {
-	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio
-	
+	if (configuracion->cantEntradas - indexCircular >= cantPaginas){ 
+	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
 		
-			compactar(tabla);
-			indexCircular = 0;
+		for (int i = indexCircular; i <= cantPaginas; i++){
+			//guardar en tabla el tamaño del valor
+			memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));				
+			guardarEnMem(mensaje, &indexCircular);
 		}
+		indexCircular = indexCircular + cantPaginas;
+	} else {
+	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio	
 		
-		guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
-						
+		switch (flagCompactar){
+			case 0 : { 
+				compactar(tabla);
+				flagCompactar = 1;
+				guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
+				break;
+			}
+			case 1 : { 
+				indexCircular = 0;
+				flagCompactar = 0;
+				guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
+				break;
+			}
+		}						
 	}
 }
 
@@ -526,6 +532,5 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int
 			compactar(tabla);
 			guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
 		}				
-	}
-		
+	}		
 }
