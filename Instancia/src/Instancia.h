@@ -70,7 +70,7 @@ void get_string_value(t_log* logger, char* key, char* *value, t_config* config);
 int connect_to_server(char * ip, char * port, char * server);
 void  send_hello(int socket);
 void recibirTamanos();
-int consultarTabla (entrada_t* tabla, content* mensaje, int tamanioMensaje);
+int consultarTabla (entrada_t* tabla, char* clave);
 void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion);
 void guardarEnMem (content* mensaje, int posicion);
 int revisarLista(char* clave);

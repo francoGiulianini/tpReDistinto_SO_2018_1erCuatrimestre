@@ -14,7 +14,7 @@ char* port_c;
 char* ip_c;
 char* name;
 char* algReemplazo;
-char* dump;
+int dump;
 int noHayLugar;
 char* mem; //storage
 pthread_t hiloCompactar;
@@ -191,10 +191,10 @@ int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja){
 		
 	for (int i = 0; i <= comienzoDeEntradasLibres; i++){
 		
-		laMasVieja = 0;
+		*laMasVieja = 0;
 		tabla[i].age++;
-		if (laMasVieja < tabla[i].age) {
-			laMasVieja = tabla[i].age;
+		if (*laMasVieja < tabla[i].age) {
+			*laMasVieja = tabla[i].age;
 		}
 		
 		if (string_equals_ignore_case(tabla[i].clave, mensaje->clave)){
@@ -202,7 +202,19 @@ int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja){
 		}		
 	}
 	return -1; // Si la clave no esta en la tabla
-}	
+}
+
+int consultarTabla (entrada_t* tabla, char* clave){
+// Se fija si la clave ya existe en la tabla devuelve esa posicion
+	
+	for (int i = 0; i <= comienzoDeEntradasLibres; i++){
+		
+		if (string_equals_ignore_case(tabla[i].clave, clave)){
+			return i;
+		}
+	}
+	return -1; // Si la clave no esta en la tabla
+}
 
 /*
 void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
@@ -220,15 +232,15 @@ void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
 */
 
 void guardarEnMem (content* mensaje, int posicion){
+
+	//////// GUARDADO EN MEMORIA
 	int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
 	memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor) + 1);
-	//aca hay que escribir el archivo	
-	//buscar en la lista la claves
-	map_t* una_clave = buscar_por_clave(lista_claves, mensaje->clave);
-	if(una_clave == NULL)
-		log_error(logger, "ERROR");
 
-	memcpy(una_clave->map, mensaje->valor, strlen(mensaje->valor) + 1);
+	//////////HASTA ACA GUARDADO EN MEMORIA
+
+	//aca hay que escribir el archivo	
+	//buscar en la lista la claves	
 }
 
 int revisarLista(char* clave)
@@ -295,6 +307,8 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 		case 12 : { //SET			
 			char *mensaje_recv = malloc (header->lenClave + header->lenValor);
+			char * clave = (char*)malloc (header->lenClave + 1);
+
 			content* mensaje = (content*)malloc(sizeof(content));
     		mensaje->clave = malloc(header->lenClave + 1);
     		mensaje->valor = malloc(header->lenValor + 1);
@@ -305,8 +319,16 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			mensaje->clave[header->lenClave] = '\0';
 			memcpy(mensaje->valor, mensaje_recv + header->lenClave, header->lenValor);
 			mensaje->valor[header->lenValor] = '\0';
+			clave[header->lenClave + 1] = '\0';
 
 			log_warning(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
+
+			//revisar si la clave ya existe
+			if(!revisarLista(clave))
+			{
+				guardarEnClaves(header, clave);
+				log_warning(logger, "Creating file for Key: %s", clave);
+			}
 
 			int cantPaginas = 0;
 			int tamanioMensaje = strlen(mensaje->clave);
@@ -343,7 +365,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
 				}						
 				
-			}
+			}		
 			
 			///////// DESDE ACA ///////////////
 			/*
@@ -382,25 +404,42 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 		case 13:{ //GET
 			// Intenta bloquear la clave y si no existe la crea (la agrega a la tabla).
 
-		}
-		case 14:{ // STORE
-			//crear archivo con la clave que tenga la posicion en la tabla y el valor
-			//ver mmap
 			char * clave = (char*)malloc (header->lenClave + 1);
 
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
 			clave[header->lenClave + 1] = '\0';
-			//revisar si la clave ya existe
-			if(!revisarLista(clave))
-			{
-				guardarEnClaves(header, clave);
-				log_warning(logger, "Creating file for Key: %s", clave);
-			}						
+		}
+		case 14:{ // STORE
+			//crear archivo con la clave que tenga la posicion en la tabla y el valor
+			//ver mmap
+			char * clave = (char*)malloc (header->lenClave + 1);
+			int cantEntradas = 0;
+
+			recv(coordinator_socket, clave, header->lenClave + 1, 0);
+			//deserializar
+			clave[header->lenClave + 1] = '\0';
+			
+			// tengo que obtener la posicion en memoria (lo calculo con la tabla)
+			// y el largo del valor, tambien lo saco de la tabla
+
+			int posicion = consultarTabla (tabla, clave);
+			int i = posicion;			
+			int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
+
+			//// STORE
+			map_t* una_clave = buscar_por_clave(lista_claves, clave);
+			if(una_clave == NULL)
+				log_error(logger, "ERROR");
+
+			memcpy(una_clave->map, mem + ubicacionEnMem, tabla[posicion].tamanio +1 );
+
+			///// HASTA ACA STORE								
 			
 			//avisar al coordinador que creo el archivo (ID = 12)
 			send_header(coordinator_socket, 12);
 			break;
+
 			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que liberar los recursos, depues lo acomodo
 			if (munmap(map, content_header->lenValor) == -1) {
 			perror("Error un-mmapping the file");
@@ -476,15 +515,15 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
 
 	// OJO! REVISAR, ES MUY TARDE Y ESTOY MEDIO TARADO YA...
 	
-	if (configuracion->cantEntradas - indexCircular >= cantPaginas){ 
+	if (configuracion->cantEntradas - indexCircular >= *cantPaginas){ 
 	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
 		
-		for (int i = indexCircular; i <= cantPaginas; i++){
+		for (int i = indexCircular; i <= *cantPaginas; i++){
 			//guardar en tabla el tamaño del valor
 			memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));				
-			guardarEnMem(mensaje, &indexCircular);
+			guardarEnMem(mensaje, indexCircular);
 		}
-		indexCircular = indexCircular + cantPaginas;
+		indexCircular = indexCircular + *cantPaginas;
 	} else {
 	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio	
 		
@@ -507,15 +546,15 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
 
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja){
 	
-	if (configuracion->cantEntradas - comienzoDeEntradasLibres >= cantPaginas){ 
+	if (configuracion->cantEntradas - comienzoDeEntradasLibres >= *cantPaginas){ 
 	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
 		
-		for (int i = comienzoDeEntradasLibres; i <= cantPaginas; i++){
+		for (int i = comienzoDeEntradasLibres; i <= *cantPaginas; i++){
 			//guardar en tabla el tamaño del valor
 			memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));			
-			guardarEnMem(mensaje, &comienzoDeEntradasLibres);
+			guardarEnMem(mensaje, comienzoDeEntradasLibres);
 		}	
-		comienzoDeEntradasLibres = comienzoDeEntradasLibres + cantPaginas;
+		comienzoDeEntradasLibres = comienzoDeEntradasLibres + *cantPaginas;
 	} else {
 	// Si no hay suficiente lugar libre: Se libera la entrada LRU y si fuera necesario, se compacta.
 		for (int i = 0; i <= comienzoDeEntradasLibres; i++){
