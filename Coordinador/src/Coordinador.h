@@ -116,6 +116,7 @@ void assign_instance(_Algorithm algorithm, t_list* instances);
 int save_on_instance(t_list* instances);
 void disconnect_socket(int socket, bool is_instance);
 instance_t* add_instance_to_list(char* name, int socket);
+void update_instance(instance_t* one_instance, content_header* header);
 void assign_letters();
 void disconnect_instance_in_list(int socket);
 instance_t* name_is_equal(t_list* lista, char* name);

@@ -297,7 +297,7 @@ void host_instance(void* arg)
                 process_message_header(header, socket);
 
 				//actualizar datos de la instancia
-				update_instance();
+				update_instance(instance, header);
 
                 free(message_send);
 
@@ -917,13 +917,15 @@ void assign_letters()
 
 	int letters_to_instances = cant_letters / cant_instances;
 	int rest_letters = cant_letters % cant_instances;
+    if(rest_letters != 0)
+        letters_to_instances++;
 	int assigned_letters = 0;
 
 	void _assign_letters(instance_t* p)
 	{
 		if (p->is_active)
 		{
-			if (cant_letters < letters_to_instances)
+			if (letters_to_instances <= cant_letters)
 			{
 				p->letter_min = 65 + assigned_letters;
 				p->letter_max = 65 + assigned_letters + letters_to_instances;
@@ -934,11 +936,13 @@ void assign_letters()
 			else
 			{
 				p->letter_min = 65 + assigned_letters;
-				p->letter_max = 65 + assigned_letters + rest_letters;
+				p->letter_max = 65 + assigned_letters + cant_letters - 1;
 				log_info(logger, "%s has keys starting from: %c, to: %c", p->name, p->letter_min, p->letter_max);
 			}
 		}
 	}
+
+    list_iterate(instances, _assign_letters);
 }
 
 void disconnect_instance_in_list(int socket)
@@ -1048,12 +1052,13 @@ instance_t* find_by_free_space(t_list* lista)
 			return false;
 	}
 
+
 	list_aux = list_filter(lista, _is_active);
 	list_sort(list_aux, _lower_than_the_next);
 
 	instance_t* one_instance = list_remove(list_aux, 0);
 
-	list_destroy_and_destroy_elements(list_aux); //ver si la otra lista sigue funcionando
+	list_destroy(list_aux); //ver si la otra lista sigue funcionando
 
 	return one_instance;
 }
