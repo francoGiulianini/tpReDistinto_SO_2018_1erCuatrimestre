@@ -207,7 +207,7 @@ int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja){
 int consultarTabla (entrada_t* tabla, char* clave){
 // Se fija si la clave ya existe en la tabla devuelve esa posicion
 	
-	for (int i = 0; i <= comienzoDeEntradasLibres; i++){
+	for (int i = 0; i < configuracion->cantEntradas; i++){
 		
 		if (string_equals_ignore_case(tabla[i].clave, clave)){
 			return i;
@@ -267,7 +267,7 @@ void guardarEnClaves(content_header* header, char* clave)
 		exit(EXIT_FAILURE);
 	}
 
-	result = lseek(fd, FILE_SIZE/*definir un maximo? ->header->lenValor-1*/, SEEK_SET);
+	result = lseek(fd, header->lenValor +1, SEEK_SET);
 	if (result == -1) {
 		close(fd);
 		perror("Error en lseek()");
@@ -283,7 +283,7 @@ void guardarEnClaves(content_header* header, char* clave)
 	map_t* una_clave = (map_t*)malloc(sizeof(map_t));
 	una_clave->clave = malloc(header->lenClave + 1);
 	memcpy(una_clave->clave, clave, header->lenClave + 1);
-	una_clave->map = mmap(NULL, FILE_SIZE/*header->lenValor*/, PROT_WRITE, MAP_SHARED, fd, 0);
+	una_clave->map = mmap(NULL, header->lenValor, PROT_WRITE, MAP_SHARED, fd, 0);
 	if (una_clave->map == MAP_FAILED) {
 		close(fd);
 		perror("Error la mapear el archivo");
@@ -307,7 +307,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 		case 12 : { //SET			
 			char *mensaje_recv = malloc (header->lenClave + header->lenValor);
-			char * clave = (char*)malloc (header->lenClave + 1);
 
 			content* mensaje = (content*)malloc(sizeof(content));
     		mensaje->clave = malloc(header->lenClave + 1);
@@ -319,21 +318,20 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			mensaje->clave[header->lenClave] = '\0';
 			memcpy(mensaje->valor, mensaje_recv + header->lenClave, header->lenValor);
 			mensaje->valor[header->lenValor] = '\0';
-			clave[header->lenClave + 1] = '\0';
 
 			log_warning(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
 
 			//revisar si la clave ya existe
-			if(!revisarLista(clave))
+			if(!revisarLista(mensaje->clave))
 			{
-				guardarEnClaves(header, clave);
-				log_warning(logger, "Creating file for Key: %s", clave);
+				guardarEnClaves(header, mensaje->clave);
+				log_warning(logger, "Creating file for Key: %s", mensaje->clave);
 			}
 
 			int cantPaginas = 0;
 			int tamanioMensaje = strlen(mensaje->clave);
 			
-			if (algReemplazo == "CIRC"){
+			if (string_equals_ignore_case(algReemplazo, "CIRC")){
 				
 				cantPaginas = getCantPaginas (tamanioMensaje);
 				// recorro la tabla hasta el comienzoDeEntradasLibres
@@ -348,7 +346,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
 				}
 				
-			} else if (algReemplazo == "LRU"){
+			} else if (string_equals_ignore_case(algReemplazo, "LRU")){
 				
 				int laMasVieja = 0;
 				cantPaginas = getCantPaginas (tamanioMensaje);
@@ -408,7 +406,12 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
-			clave[header->lenClave + 1] = '\0';
+			clave[header->lenClave] = '\0';
+
+			send_header(coordinator_socket, 12);
+
+			free(clave);
+			break;
 		}
 		case 14:{ // STORE
 			//crear archivo con la clave que tenga la posicion en la tabla y el valor
@@ -418,13 +421,13 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
-			clave[header->lenClave + 1] = '\0';
+			clave[header->lenClave] = '\0';
 			
 			// tengo que obtener la posicion en memoria (lo calculo con la tabla)
 			// y el largo del valor, tambien lo saco de la tabla
 
 			int posicion = consultarTabla (tabla, clave);
-			int i = posicion;			
+			
 			int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
 
 			//// STORE
@@ -432,12 +435,15 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			if(una_clave == NULL)
 				log_error(logger, "ERROR");
 
-			memcpy(una_clave->map, mem + ubicacionEnMem, tabla[posicion].tamanio +1 );
-
+			memcpy(una_clave->map, mem + ubicacionEnMem, tabla[posicion].tamanio);
+			//msync(una_clave->map, strlen(una_clave->map), MS_SYNC);
 			///// HASTA ACA STORE								
 			
 			//avisar al coordinador que creo el archivo (ID = 12)
 			send_header(coordinator_socket, 12);
+
+			free(clave);
+
 			break;
 
 			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que liberar los recursos, depues lo acomodo
@@ -520,7 +526,9 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
 		
 		for (int i = indexCircular; i <= *cantPaginas; i++){
 			//guardar en tabla el tamaño del valor
-			memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));				
+			strcpy(tabla[i].clave , mensaje->clave);
+			tabla[i].tamanio = strlen(mensaje->valor);
+			tabla[i].age = 0;				
 			guardarEnMem(mensaje, indexCircular);
 		}
 		indexCircular = indexCircular + *cantPaginas;
@@ -551,7 +559,9 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int
 		
 		for (int i = comienzoDeEntradasLibres; i <= *cantPaginas; i++){
 			//guardar en tabla el tamaño del valor
-			memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));			
+			strcpy(tabla[i].clave , mensaje->clave);
+			tabla[i].tamanio = strlen(mensaje->valor);
+			tabla[i].age = 0;			
 			guardarEnMem(mensaje, comienzoDeEntradasLibres);
 		}	
 		comienzoDeEntradasLibres = comienzoDeEntradasLibres + *cantPaginas;
