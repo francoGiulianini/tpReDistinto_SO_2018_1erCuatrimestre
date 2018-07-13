@@ -236,7 +236,7 @@ void unlock_key_by_console(char* key)
 	calculate_estimation(otro_esi);
 	list_add(lista_ready, otro_esi);
 
-	sort_list_by_estimation(lista_ready);
+	sort_list_by_algorithm(lista_ready);
 	sem_post(&hay_esis);
 
 	pthread_mutex_unlock(&cola_bloqueados_mutex);
