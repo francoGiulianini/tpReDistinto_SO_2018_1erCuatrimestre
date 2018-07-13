@@ -97,6 +97,7 @@ void calculate_estimation(t_esi* otro_esi);
 void refresh_waiting_time(t_list * list);
 void sort_list_by_algorithm(t_list * list);
 //void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key);
+bool esi_has_key(char* key);
 void send_esi_to_ready(t_esi * un_esi);
 void finish_esi(t_esi * un_esi);
 _Algorithm to_algorithm(char* string);

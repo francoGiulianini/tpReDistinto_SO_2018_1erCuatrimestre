@@ -56,7 +56,7 @@ typedef struct
 {
     char* name;
     int socket;
-    int space_used; //para least space used
+    int free_space; //para least space used
     int is_active; //para saber si se cayo o no
 	char letter_min;
 	char letter_max; //para key explicit
@@ -124,7 +124,7 @@ instance_t* choose_by_counter(t_list* lista);
 instance_t* choose_by_space(t_list* lista);
 instance_t* choose_by_letter(t_list* lista);
 instance_t* find_by_key(t_list* lista, char* key);
-instance_t* find_by_space_used(t_list* lista);
+instance_t* find_by_free_space(t_list* lista);
 instance_t* find_by_letter(t_list* lista, char letter);
 _Algorithm to_algorithm(char* string);
 

@@ -295,6 +295,10 @@ void host_instance(void* arg)
                     disconnect_socket(socket, true);
 
                 process_message_header(header, socket);
+
+				//actualizar datos de la instancia
+				update_instance();
+
                 free(message_send);
 
                 log_info(logger, "Instance finished SET");
@@ -403,7 +407,11 @@ void host_scheduler(void* arg)
                 
                 send(socket, message->key, header->len, 0);
 
-                recv(socket, header, sizeof(content_header), 0);
+                valread = recv(socket, header, sizeof(content_header), 0);
+				if (valread <= 0)
+				{
+					exit_with_error(logger, "Scheduler Disconnected");
+				}
 
                 process_message_header(header, socket);
                 sem_post(&scheduler_response);
@@ -418,6 +426,14 @@ void host_scheduler(void* arg)
 
                 send(socket, message->key, header->len, 0);
 
+                valread = recv(socket, header, sizeof(content_header), 0);
+				if (valread <= 0)
+				{
+					exit_with_error(logger, "Scheduler Disconnected");
+				}
+
+				process_message_header(header, socket);
+
                 sem_post(&scheduler_response);
                 break;
             }
@@ -427,6 +443,17 @@ void host_scheduler(void* arg)
                 header->len2 = 0;
                 send(socket, header, sizeof(content_header), 0);
 
+				send(socket, message->key, header->len, 0);
+
+				valread = recv(socket, header, sizeof(content_header), 0);
+				if (valread <= 0)
+				{
+					exit_with_error(logger, "Scheduler Disconnected");
+				}
+
+				process_message_header(header, socket);
+
+				sem_post(&scheduler_response);
                 break;
             }
             case ABORT: //abortar esi
@@ -482,6 +509,8 @@ void process_message_header(content_header* header, int socket)
         }
         case 12: //todo ok
         {
+			//nothing
+
             break;
         }
         case 20:
@@ -510,10 +539,18 @@ void process_message_header(content_header* header, int socket)
             key_is_not_blocked = 0;
             break;
         }
-        case STATUS:
+        case 34:
         {
+			log_info(logger, "ESI has the key");
+			key_is_not_blocked = 1;
             break;
         }
+		case 35:
+		{
+			log_info(logger, "ESI does not have the key anymore");
+			key_is_not_blocked = 0;
+			break;
+		}
         default:
         {
             log_error(logger, "Incorrect ID message");
@@ -617,11 +654,20 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     //flag para hilos instancia y planificador
     operation = SET;
 
-    pthread_mutex_lock(&lock);
-    result = save_on_instance(instances);
-    pthread_mutex_unlock(&lock);
+	sem_post(&esi_operation);
 
-    sem_post(&esi_operation);
+	if (key_is_not_blocked)
+	{
+		pthread_mutex_lock(&lock);
+		result = save_on_instance(instances);
+		pthread_mutex_unlock(&lock);
+	}
+	else
+	{
+		//esi tiene que abortar
+		abort_esi(socket);
+		return;
+	}
 
     sem_wait(&result_set);
 
@@ -670,12 +716,21 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
     //flag para hilos instancia y planificador
 	operation = STORE;
 
-	//buscar instancia con la clave y avisarle para que guarde en disco
-	pthread_mutex_lock(&lock);
-	result = save_on_instance(instances);
-	pthread_mutex_unlock(&lock);
-    
     sem_post(&esi_operation);
+
+	//buscar instancia con la clave y avisarle para que guarde en disco
+	if (key_is_not_blocked)
+	{
+		pthread_mutex_lock(&lock);
+		result = save_on_instance(instances);
+		pthread_mutex_unlock(&lock);
+	}
+	else
+	{
+		//esi tiene que abortar
+		abort_esi(socket);
+		return;
+	}  
 
 	sem_wait(&result_store);
 
@@ -683,16 +738,38 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 	{
 		log_info(logger, "But Instance was not available. Aborting ESI");
 		abort_esi(socket);
+		return;
 	}
 	else
 	{
 		log_info(logger, "Operation Successful");
 		send_header(socket, 23); //operacion con exito
+		dictionary_remove(blocked_keys, message->key);
 	}
-    
-    dictionary_remove(blocked_keys, message->key);
+}
 
-    send_header(socket, 23); //operacion con exito
+void update_instance(instance_t* one_instance, content_header* header)
+{
+	switch (algorithm)
+	{
+	case EL:
+	{
+		//nothing
+		break;
+	}
+	case LSU:
+	{
+		//actualizar espacios libres
+
+		one_instance->free_space = header->len;
+		break;
+	}
+	case KE:
+	{
+		//nothing
+		break;
+	}
+	}
 }
 
 void initiate_compactation()
@@ -808,7 +885,7 @@ instance_t* add_instance_to_list(char* name, int socket)
     { //si no esta en la lista
         inst_aux = (instance_t*)malloc(sizeof(instance_t)); 
         inst_aux->name = name;
-        inst_aux->space_used = 0;
+        inst_aux->free_space = 0;
 		inst_aux->letter_min = 0;
 		inst_aux->letter_max = 0;
         inst_aux->keys = dictionary_create();
@@ -923,7 +1000,7 @@ instance_t* choose_by_counter(t_list* lista)
 
 instance_t* choose_by_space(t_list* lista)
 {
-    instance_t* an_instance = find_by_space_used(lista);
+    instance_t* an_instance = find_by_free_space(lista);
 
     return an_instance;
 }
@@ -952,7 +1029,7 @@ instance_t* find_by_key(t_list* lista, char* key)
     return list_find(instances, _is_the_one);
 }
 
-instance_t* find_by_space_used(t_list* lista)
+instance_t* find_by_free_space(t_list* lista)
 {
 	t_list* list_aux = list_create();
 
@@ -965,7 +1042,7 @@ instance_t* find_by_space_used(t_list* lista)
 	}
 	bool _lower_than_the_next(instance_t* p, instance_t* q)
 	{
-		if (p->space_used < q->space_used)
+		if (p->free_space > q->free_space)
 			return true;
 		else
 			return false;
@@ -974,7 +1051,11 @@ instance_t* find_by_space_used(t_list* lista)
 	list_aux = list_filter(lista, _is_active);
 	list_sort(list_aux, _lower_than_the_next);
 
-	return list_get(list_aux, 0);
+	instance_t* one_instance = list_remove(list_aux, 0);
+
+	list_destroy_and_destroy_elements(list_aux); //ver si la otra lista sigue funcionando
+
+	return one_instance;
 }
 
 instance_t* find_by_letter(t_list* lista, char letter)

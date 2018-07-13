@@ -468,10 +468,26 @@ void wait_question(int socket)
         	unlock_key(message);
             break;
         }
-    	case 33:        //coordinador no pregunta nada (operacion SET)
-        	log_info(logger, "Coordinator asked to set a key");
-            break;
+    	case 33:        //coordinador pregunta operacion SET
+        {	
+            char* message = (char*)malloc(header->len + 1);
 
+        	recv(socket, message, header->len, 0);
+        	message[header->len] = '\0';
+
+            log_info(logger, "Coordinator asked to set Key: %s", message);
+
+            if(esi_has_key(message))
+            {
+                send_header(socket_c, 34);
+            }
+            else
+            {
+                send_header(socket_c, 35);
+            }
+            
+            break;
+        }
     	case 34:
         	abort_esi = 1;
             break;
@@ -591,8 +607,22 @@ void unlock_key(char* key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
 
-    if(queue_is_empty(a_key->cola_esis_bloqueados))
+    if(esi_has_key(key))
+    {
+        //#TODO: desalojar clave
+        send_header(socket_c, 34);
+    }
+    else
+    {
+        send_header(socket_c, 35);
         return;
+    }
+
+    if(queue_is_empty(a_key->cola_esis_bloqueados))
+    {            
+        return;
+    }
+
     t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
     
     switch(algorithm)
@@ -737,6 +767,17 @@ float response_ratio(t_esi * p)
 {
     queue_push(a_key->cola_esis_bloqueados, un_esi);
 }*/
+
+bool esi_has_key(char* key)
+{
+    bool _owns_key(clave_bloqueada_por_esi_t* p)
+    {
+        return((string_equals_ignore_case(p->esi_id, un_esi->name))
+            && (string_equals_ignore_case(p->key, key)));
+    }
+
+    list_any_satisfy(claves_bloqueadas_por_esi, _owns_key);
+}
 
 void send_esi_to_ready(t_esi * un_esi)
 {
