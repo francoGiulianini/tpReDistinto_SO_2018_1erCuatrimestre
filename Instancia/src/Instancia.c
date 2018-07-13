@@ -531,13 +531,13 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
 			case 0 : { 
 				compactar(tabla);
 				flagCompactar = 1;
-				guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
+				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
 				break;
 			}
 			case 1 : { 
 				indexCircular = 0;
 				flagCompactar = 0;
-				guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
+				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
 				break;
 			}
 		}						
@@ -559,17 +559,17 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int
 	// Si no hay suficiente lugar libre: Se libera la entrada LRU y si fuera necesario, se compacta.
 		for (int i = 0; i <= comienzoDeEntradasLibres; i++){
 			int auxLaMasVieja = 0;
-			laMasVieja = 0;
-			if (auxLaMasVieja < tabla[i].age && tabla[i].age < laMasVieja) {
+			*laMasVieja = 0;
+			if (auxLaMasVieja < tabla[i].age && tabla[i].age < *laMasVieja) {
 				auxLaMasVieja = tabla[i].age;
 			}
-			if (tabla[i].age == laMasVieja){
+			if (tabla[i].age == *laMasVieja){
 				strcpy(tabla[i].clave, "vacio");
 				tabla[i].age = 0;
 			}
-			laMasVieja = auxLaMasVieja;
+			*laMasVieja = auxLaMasVieja;
 			compactar(tabla);
-			guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
+			guardarEnTablaLRU(tabla, mensaje, cantPaginas, laMasVieja);
 		}				
 	}		
 }
