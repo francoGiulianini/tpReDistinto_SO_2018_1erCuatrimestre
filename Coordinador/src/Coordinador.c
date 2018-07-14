@@ -204,7 +204,7 @@ void exit_with_error(t_log* logger, char* error_message)
 
 void configure_logger()
 {
-  logger = log_create("Coordinador.log", "Coordinador", true, LOG_LEVEL_INFO);
+  logger = log_create("Coordinador.log", "Coordinador", false, LOG_LEVEL_INFO);
 }
 
 void host_instance(void* arg)
@@ -281,7 +281,7 @@ void host_instance(void* arg)
                 header->len = length1;
                 header->len2 = length2;
 
-                log_warning(logger, "Sending Value to Instance: %s", name);
+                log_info(logger, "Sending Value to Instance: %s", name);
                 send(socket, header, sizeof(content_header), 0);
                 
                 //serializar message
@@ -414,6 +414,7 @@ void host_scheduler(void* arg)
 				}
 
                 process_message_header(header, socket);
+                
                 sem_post(&scheduler_response);
                 break;
             }
@@ -586,6 +587,12 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
 
 void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
+    if(header->len > MAX_KEY_LENGTH)
+    {
+        log_error(logger, "Key exceeds 40 characters, aborting");
+        abort_esi(socket);
+    }
+
     char* message_recv = (char*)malloc(header->len + header->len2);
     message = (message_content*) malloc(sizeof(message_content));
     message->key = malloc(header->len + 1);
@@ -656,6 +663,8 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 
 	sem_post(&esi_operation);
 
+    sem_wait(&scheduler_response);
+
 	if (key_is_not_blocked)
 	{
 		pthread_mutex_lock(&lock);
@@ -717,6 +726,8 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 	operation = STORE;
 
     sem_post(&esi_operation);
+
+    sem_wait(&scheduler_response);
 
 	//buscar instancia con la clave y avisarle para que guarde en disco
 	if (key_is_not_blocked)
@@ -842,7 +853,7 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
 		}
     }
 
-	log_warning(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
+	log_info(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
 	dictionary_put(chosen_one->keys, message->key, NULL);
 
 	sem_post(&chosen_one->start);
@@ -1011,7 +1022,7 @@ instance_t* choose_by_space(t_list* lista)
 
 instance_t* choose_by_letter(t_list* lista)
 {
-	char letter = message->value[0];
+	char letter = message->key[0];
 	if (letter >= 97 && letter <= 122) //si esta en minuscula se pasa a mayuscula
 		letter -= 32;
 

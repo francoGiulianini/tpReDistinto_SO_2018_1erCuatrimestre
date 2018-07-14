@@ -31,6 +31,7 @@
 #define SET 33
 #define Abort 34
 #define STATUS 39*/
+#define MAX_KEY_LENGTH 40
 
 typedef enum _Operations {GET, SET, STORE, STATUS, ABORT} _Operation;
 typedef enum _Clients {INSTANCE, ESI, SCHEDULER} _Client;
