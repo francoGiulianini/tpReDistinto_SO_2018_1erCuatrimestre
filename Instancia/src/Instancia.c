@@ -388,7 +388,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				break;
 			}else{ //si la clave no está tomada
 				// avisar al coordinador -> ERROR: Clave no bloqueada
-				send_header(coordinator_socket, 15);
 				log_info(logger, "ERROR: La clave %s no se encuentra tomada", mensaje->clave);
 				break;
 			}
@@ -428,8 +427,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				send_header(coordinator_socket, 12);
 				break;
 			}else{ //si la clave no está tomada
-				// avisar al coordinador -> ERROR: Clave no bloqueada
-				send_header(coordinator_socket, 15);
+				// avisar al coordinador -> ERROR: Clave no bloqueada				
 				log_info(logger, "ERROR: La clave %s no se encuentra tomada", clave);
 				break;
 			}
@@ -584,6 +582,8 @@ void storeKey(entrada_t * tabla, char* clave){
 	int posicion = consultarTabla (tabla, clave);
 	if (posicion == -1){ // Si quiero hacer STORE de una key que no está más en la tabla
 		// send error to coordinator
+		send_header(coordinator_socket, 15);		
+		log_info(logger, "ERROR: La clave %s ha sido reemplazada", clave);
 	}else{ // Si está en la tabla:
 		int i = posicion;			
 		int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
