@@ -84,6 +84,7 @@ int consultarTablaCIRC (entrada_t* tabla, content* mensaje);
 int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja);
 void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas);
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja);
-
+void storeKey(entrada_t * tabla, char* clave);
+void dump(entrada_t * tabla);
 
 #endif
