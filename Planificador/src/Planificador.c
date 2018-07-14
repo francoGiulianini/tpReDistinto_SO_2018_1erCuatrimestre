@@ -9,17 +9,14 @@
  */
 #include "Planificador.h"
 #include "Consola.h"
-//#include <ConfigGetValues.h>
 
 pthread_t idConsole;
 pthread_t idHostConnections;
 struct sockaddr_in serverAddress;
 int fin_de_esi = 0;
 int respuesta_ok = 1;
-int key_blocked = 0;
+//int key_blocked = 0;
 int abort_esi = 0;
-/* int kick_esi = 0; #DUDA	No creo que sea necesario este flag, xq creo que hasta complica mas que facilitar las cosas,
-							sobre todo debido al chequeo en el while del main. Es mejor que todo ese comportamiento lo tenga unlock_key */
 
 int main(void)
 {
@@ -87,17 +84,6 @@ int main(void)
 
         update_values();
 
-        //#TODO:
-
-        /*if(blocked_esi_by_console)
-        {
-            blocked_esi_by_console = 0;
-            sem_post(&esi_executing);
-            pthread_mutex_unlock(&pause_mutex);
-            continue;
-        }*/ 
-        //LA CLAVE SE BLOQUEA NO EL ESI
-
         if(!respuesta_ok)
         {
             if(abort_esi) //enviar a cola finalizados
@@ -109,19 +95,14 @@ int main(void)
         pthread_mutex_unlock(&status_mutex);
         pthread_mutex_unlock(&pause_mutex);
 
-        if(fin_de_esi /*|| kick_esi*/)
+        if(fin_de_esi)
         {
-           /*if(kick_esi)	//#DUDA siempre que se hace kick_esi, debe entrar otro ESI, asi que en realidad mas que send_esi_to_ready, deberia tambien mandar otro_esi a ejecucion
-                send_esi_to_ready(un_esi);
-            else
-                */finish_esi(un_esi);//pregunta si se bloqueo o finalizo o recien empieza
-
+        	finish_esi(un_esi);
             sem_wait(&hay_esis);
 
-            //para que se pueda cerrar el programa correctamente
-            if(stop)
+            if(stop)        //para que se pueda cerrar el programa correctamente
                 continue;
-            
+
             un_esi = list_remove(lista_ready, 0);
             fin_de_esi = 0;
         }
@@ -185,7 +166,7 @@ void configure_logger()
     logger = log_create("Planificador.log", "Planificador", false, LOG_LEVEL_INFO);
 }
 
-void new_blocked_keys()		//#DUDA Me hace mucho ruido el funcionamiento de esto, y los malloc con el for, cuando se liberan?
+void new_blocked_keys()
 {
     char** blocked_keys = config_get_array_value(config, "ClavesBloqueadas");
 
@@ -342,10 +323,7 @@ void HostConnections()
                         num_esi++;
 
                         char* name = (char*)malloc(7);
-                        if(num_esi < 10)
-                            sprintf(name, "ESI0%d", num_esi);
-                        else 
-                            sprintf(name, "ESI%d", num_esi);
+                        sprintf(name, "ESI%02d", num_esi);
 
                         a_new_esi->socket = sd;
                         a_new_esi->name = (char*)malloc(7);
@@ -363,8 +341,6 @@ void HostConnections()
                         sem_post(&hay_esis);
 
                         free(name);
-                        //#DUDA_RESPUESTA: este free hace que se pierda la referencia del esi
-                        //free(a_new_esi);
                     }
 
                     if(header->id == 22)
@@ -452,38 +428,36 @@ void wait_question(int socket)
     recv(socket, header, sizeof(content_header), 0);
     log_info(logger, "Received header id: %d", header->id);
 
-    char* message = (char*)malloc(header->len + 1);
-
     switch (header->id)
     {
     	case 31:        //coordinador pregunta por clave bloqueada
         {	            
-        	recv(socket, message, header->len, 0);
-        	message[header->len] = '\0';
+        	recv(socket, mensaje, header->len, 0);
+        	mensaje[header->len] = '\0';
 
-        	log_info(logger, "Coordinator asked to check Key: %s", message);
-        	check_key(message);
+        	log_info(logger, "Coordinator asked to check Key: %s", mensaje);
+        	check_key(mensaje);
             break;
         }
     	case 32:        //coordinador pide desbloquear clave
         {
-        	recv(socket, message, header->len, 0);
-        	message[header->len] = '\0';
+        	recv(socket, mensaje, header->len, 0);
+        	mensaje[header->len] = '\0';
 
-        	log_info(logger, "Coordinator asked to store Key: %s", message);
-        	unlock_key(message);
+        	log_info(logger, "Coordinator asked to store Key: %s", mensaje);
+        	unlock_key(mensaje);
             break;
         }
     	case 33:        //coordinador pregunta operacion SET
         {	
-            char* message = (char*)malloc(header->len + 1);
+            char* mensaje = (char*)malloc(header->len + 1);
 
-        	recv(socket, message, header->len, 0);
-        	message[header->len] = '\0';
+        	recv(socket, mensaje, header->len, 0);
+        	mensaje[header->len] = '\0';
 
-            log_info(logger, "Coordinator asked to set Key: %s", message);
+            log_info(logger, "Coordinator asked to set Key: %s", mensaje);
 
-            if(esi_has_key(message))
+            if(esi_has_key(mensaje))
             {
                 send_header(socket_c, 34);
             }
@@ -492,6 +466,8 @@ void wait_question(int socket)
                 send_header(socket_c, 35);
             }
             
+            free(mensaje);
+
             break;
         }
     	case 34:
@@ -507,7 +483,6 @@ void wait_question(int socket)
         	exit_with_error(logger, "");
     }
 
-    //free(message);//#DUDA: este free tira segmentation fault para la segunda vez
     free(header);
 }
 
@@ -545,41 +520,37 @@ void check_key(char * key)
 	if(a_key == NULL) //si no encuentra la clave en la lista, la crea
 	{
 		log_info(logger, "Requested Key doesnt exist, Adding Key to list");
-        
-        //#DUDA_RESPUESTA: como a_key es NULL hay que creala haciendo malloc
         a_key = malloc(sizeof(clave_bloqueada_t));
-        a_key->key = key;
+        a_key->key = malloc(key_len * sizeof(char));
+        strcpy(a_key->key, key);
         a_key->cola_esis_bloqueados = queue_create();
 
         list_add(lista_bloqueados, a_key);
 
-        clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
-        nueva_clave->esi_id = un_esi->name;
-        //OJO que key es una variable local, se pierde la referencia al terminar
-        nueva_clave->key = key;
-
-        list_add(claves_bloqueadas_por_esis, nueva_clave);
+        clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t)); //REPETICION DE CODIGO ABAJO \/
+        nueva_clave->esi_id = malloc(id_len * sizeof(char));
+        strcpy(nueva_clave->esi_id, un_esi->name);
+        nueva_clave->key = malloc(key_len * sizeof(char));
+        strcpy(nueva_clave->key, key);
+        list_add(claves_bloqueadas_por_esis, nueva_clave); //Reservo la clave como bloqueada para que la use el esi que esta ejecutando (tecnicamente no esta bloqueada aun, eso lo hace el coordinador)
 
         send_header(socket_c, 31); //31 clave libre
-        
-        //free(nueva_clave);
+        return;
 	}
     else
     {
-        if(queue_is_empty(a_key->cola_esis_bloqueados)) //la lista esta vacia
+        if(queue_is_empty(a_key->cola_esis_bloqueados) && !is_key_blocked(key)) //la lista esta vacia y ningun esi la tiene bloqueada
         {
-            //#TODO: fijarse si un esi tiene la clave
-            // usando lista claves_bloqueadas_por_esis
-
             clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
-            nueva_clave->esi_id = un_esi->name;
-            nueva_clave->key = key;
+            nueva_clave->esi_id = malloc(id_len * sizeof(char));
+            strcpy(nueva_clave->esi_id, un_esi->name);
+        	nueva_clave->key = malloc(key_len * sizeof(char));
+        	strcpy(nueva_clave->key, key);
 
             list_add(claves_bloqueadas_por_esis, nueva_clave);
             /* REPETICION DE CODIGO /\ */
 
             send_header(socket_c, 31); //31 clave libre
-            //free(nueva_clave);
             return;
         }
 
@@ -588,13 +559,14 @@ void check_key(char * key)
         {
             //el primer elemento es CONSOLA
             //esta bloqueado por clave desde configuracion
-            one_esi = queue_pop(a_key->cola_esis_bloqueados);
+            //#INTERPRETACION_DE_FRANCO La clave esta bloqueada por consola, debe seguir bloqueada hasta que sea liberada por consola
+            send_header(socket_c, 32); //Clave bloqueada por consola
+            //#DUDA aunque la clave este bloqueada por consola, ¿deberia meter a la cola_esis_bloqueados el esi que la esta pidiendo en este momento? Yo creeria que si, debido al analisis de deadlock
+            return; //Yo creo que aca deberia retornar, ya que lo que viene aca abajo seria lo que sucede si la clave esta bloqueada pero no por consola, sino xq hay esis ejecutando y/o esperandola
         }
 
-        //la lista tiene elementos pero pudo haber sido desbloqueada por consola
-        //#TODO: asegurarse de que todos los malloc tengan free
-        //#TODO: fijarse si un esi tiene la clave(ver esi_has_key() esta en la rama fix_operacion_set)
-        // usando lista claves_bloqueadas_por_esis 
+        //#TODO la lista tiene elementos pero pudo haber sido desbloqueada por consola
+        //#INTERPRETACION_DE_FRANCO Tecnicamente si ya estoy aca es xq la clave no esta bloqueada por consola, por lo que no habria nada mas que hacer ademas del comportamiento de aca abajo
 
         log_info(logger, "Requested Key was taken before, Adding ESI to blocked queue");
 
@@ -607,18 +579,20 @@ void check_key(char * key)
 /*
 Funcion: unlock_key(char* key)
 Descripcion: Desbloquea a un esi de la cola de bloqueados
-Comentarios: 
+Comentarios: Asumo que si una clave esta bloqueada por consola, tiene el "esi consola" (un esi con esi->name = "CONSOLA") en la cabeza de la cola, te tal forma que el primer esi que tomo sea ese
 */
 void unlock_key(char* key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
 
-    if(esi_has_key(key))
+    if(esi_has_key(key))        //#DUDA Pedirle a Fer que me explique el comportamiento de esto
     {
-        //#TODO: desalojar clave
-        send_header(socket_c, 34);
+        //desalojar clave	//#CHECK comportamiento de la consola al bloquear una key (deberia poner el "esi consola" en el primer lugar de la cola a ser popeado)
+        release_key(key);	//#DUDA #TODO si la clave esta bloqueada por consola, cuando es liberada por el esi que la usaba debo chequear que el siguiente esi que estoy tomando no sea la consola. Si es asi, ¿que hago?
+        send_header(socket_c, 34);		//#DUDA Si un esi tiene la clave reservada y yo la bloqueo con la consola,
+                                        //      se bloquea para el esi que ya la tenia reservada y la sigue usando todavia, o se bloquea para el siguiente esi que la intente tomar cuando el esi que la tenia la libera?
     }
-    else
+    else //#DUDA Que un_esi no tenga reservada la clave no significa que la clave este libre (la puede tener tomada otro esi)
     {
         send_header(socket_c, 35);
         return;
@@ -648,15 +622,15 @@ void unlock_key(char* key)
             break;
         }
         case SJFCD: //Precondicion: Asumo que no existe ESI en la cola de ready con rafaga mas corta que un_esi, por lo tanto:
-        //#TODO: El SJFCD debería:
-
         /*
         
+		Comportamiento del SJFCD:
+
         1. calcular estimacion del otro_esi
         2. Chequear si otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated,
             2.1 Si es cierto:
                 2.1.1 Mandar un_esi a lista_ready,
-                2.1.2 Meter a otro_esi en ejecución, #TODO #DUDA: Como se asigna un ESI a ejecucion?
+                2.1.2 Meter a otro_esi en ejecución,
             2.2 Si es falso:
             	2.2.1 Mandar otro_esi a lista_ready,
 
@@ -668,10 +642,8 @@ void unlock_key(char* key)
                 otro_esi->name, otro_esi->cpu_time_estimated);
 
 
-            if (otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated)		//si el que se libera es mas chico desalojar = 1
+            if (otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated)
             {
-                //kick_esi = 1;
-                //#DUDA: si yo activo el flag kick_esi pero dsps digo que un_esi = otro_esi, al retornar me terminaria pateando el ESI que TIENE que ejecutar
             	list_add(lista_ready, un_esi);
                 un_esi = otro_esi; //un_esi siempre es el ESI que se está ejecutando
             }
@@ -767,38 +739,20 @@ float response_ratio(t_esi * p)
     return (p->waiting_time + p->cpu_time_estimated)/p->cpu_time_estimated;
 }
 
-//#TODO:
-
-/*void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key)
-{
-    queue_push(a_key->cola_esis_bloqueados, un_esi);
-}*/
-
-bool esi_has_key(char* key)
-{
-    bool _owns_key(clave_bloqueada_por_esi_t* p)
-    {
-        return((string_equals_ignore_case(p->esi_id, un_esi->name))
-            && (string_equals_ignore_case(p->key, key)));
-    }
-
-    list_any_satisfy(claves_bloqueadas_por_esis, _owns_key);
-}
-
 void send_esi_to_ready(t_esi * un_esi)
 {
     //agregar a lista ready
     list_add(lista_ready, un_esi);
     //ordenar lista acorde al algoritmo establecido por consola
     sort_list_by_algorithm(lista_ready);
-    //kick_esi = 0;
 }
 
-void finish_esi(t_esi * un_esi)
+void finish_esi(t_esi * esi)
 {
     //agregar a cola finalizados
-    queue_push(finished_esis, un_esi);
-    //#TODO: liberar todos los recursos tomados por el ESI
+    queue_push(finished_esis, esi);
+    //Solo libero los recursos tomados si termino bien la ejecucion
+    if(!abort_esi) release_all_keys(esi);
 
     abort_esi = 0;
 }
@@ -817,17 +771,76 @@ _Algorithm to_algorithm(char* string)
 
 void refresh_waiting_time (t_list * list)
 {
-    /*t_link_element * list_node = list->head;
-
-    for(list_node != NULL)
-    {
-        list_node->data->waiting_time += 1;
-        list_node = list_node->next;
-    }*/
     void _increase_time(t_esi* p)
     {
         p->waiting_time += 1;
     }
 
     list_iterate(lista_ready, _increase_time);
+}
+
+void release_all_keys(t_esi * esi)
+{
+	    bool _does_esi_have_key(clave_bloqueada_por_esi_t* p)
+    {
+        return string_equals_ignore_case(p->esi_id, esi->name);
+    }
+
+    void * i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
+    if(i != NULL)
+    {
+    	free(i->esi_id);
+    	free(i->key)
+    	free(i);
+    }
+
+    while(i != NULL)
+    {
+    	i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
+
+    	if(i != NULL)
+    	{
+    		free(i->esi_id);
+    		free(i->key)
+    		free(i);
+    	}
+    }
+}
+
+void release_key(char* key)
+{
+    bool _owns_key(clave_bloqueada_por_esi_t* p)
+    {
+        return((string_equals_ignore_case(p->esi_id, un_esi->name))
+            && (string_equals_ignore_case(p->key, key)));
+    }
+
+    void * i = list_remove_by_condition(claves_bloqueadas_por_esis, _owns_key);
+    if(i != NULL)
+    {
+    	free(i->esi_id);
+    	free(i->key)
+    	free(i);
+    }
+}
+
+bool esi_has_key(char* key)
+{
+    bool _owns_key(clave_bloqueada_por_esi_t* p)
+    {
+        return((string_equals_ignore_case(p->esi_id, un_esi->name))
+            && (string_equals_ignore_case(p->key, key)));
+    }
+
+    list_any_satisfy(claves_bloqueadas_por_esis, _owns_key);
+}
+
+bool is_key_blocked(char* key)
+{
+    bool _is_key_taken(clave_bloqueada_por_esi_t* p)
+    {
+        return string_equals_ignore_case(p->key, key);
+    }
+
+    list_any_satisfy(claves_bloqueadas_por_esis, _is_key_taken);
 }

@@ -78,6 +78,7 @@ sem_t hay_esis;
 sem_t esi_executing;
 sem_t coordinador_pregunta;
 sem_t esi_respuesta;
+char mensaje[40 + 1];
 
 void exit_with_error(t_log* logger, char* error_message); //shared library
 void configure_logger();
@@ -96,11 +97,13 @@ void update_values();
 void calculate_estimation(t_esi* otro_esi);
 void refresh_waiting_time(t_list * list);
 void sort_list_by_algorithm(t_list * list);
-//void block_esi(t_esi * un_esi, clave_bloqueada_t* a_key);
-bool esi_has_key(char* key);
 void send_esi_to_ready(t_esi * un_esi);
-void finish_esi(t_esi * un_esi);
+void finish_esi(t_esi * esi);
 _Algorithm to_algorithm(char* string);
 float response_ratio(t_esi * p);
+void release_all_keys(t_esi * esi);
+void release_key(char * key);
+bool esi_has_key(char* key);
+bool is_key_blocked(char* key);
 
 #endif /* PLANIFICADOR_H_ */
