@@ -49,11 +49,11 @@ int main(void)
 	
 	mem = malloc(sizeof (char) *configuracion->cantEntradas*configuracion->tamanioEntradas);
 
-	int error = pthread_create(&hiloCompactar, NULL, (void *)compactar, tabla);
+	/*int error = pthread_create(&hiloCompactar, NULL, (void *)compactar, tabla);
 			if(error != 0)
 			{
 				log_error(logger, "Couldn't create thread Compactar");
-			}
+			}*/
 
 	while(1)
 	{
@@ -69,7 +69,7 @@ int main(void)
 
 void configure_logger()
 {
-  logger = log_create("Instancia.log", "Instancia", true, LOG_LEVEL_INFO);
+  logger = log_create("Instancia.log", "Instancia", false, LOG_LEVEL_INFO);
 }
 
 void exit_with_error(t_log* logger, char* error_message)
@@ -319,17 +319,17 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			memcpy(mensaje->valor, mensaje_recv + header->lenClave, header->lenValor);
 			mensaje->valor[header->lenValor] = '\0';
 
-			log_warning(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
+			log_info(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
 
 			//revisar si la clave ya existe
 			if(!revisarLista(mensaje->clave))
 			{
 				guardarEnClaves(header, mensaje->clave);
-				log_warning(logger, "Creating file for Key: %s", mensaje->clave);
+				log_info(logger, "Creating file for Key: %s", mensaje->clave);
 			}
 
 			int cantPaginas = 0;
-			int tamanioMensaje = strlen(mensaje->clave);
+			int tamanioMensaje = strlen(mensaje->valor);
 			
 			if (string_equals_ignore_case(algReemplazo, "CIRC")){
 				
@@ -343,7 +343,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					}
 					guardarEnMem (mensaje, posicion);
 				} else { // Si la clave no esta en la tabla
-					guardarEnTablaCIRC(tabla, mensaje, &cantPaginas);
+					guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
 				}
 				
 			} else if (string_equals_ignore_case(algReemplazo, "LRU")){
@@ -482,7 +482,7 @@ map_t * buscar_por_clave(t_list* lista_claves, char* clave)
 
 void compactar (entrada_t * tabla){
 
-	sem_wait(&semCompactar);
+	//sem_wait(&semCompactar);
 
 	int clavesVacias = 0;
 	int j = 0;
@@ -499,9 +499,11 @@ void compactar (entrada_t * tabla){
 			}
 		}	
 	}
+
 	// Una vez que se compacto, se actualiza el comienzoDeEntradasLibres
 	int e = 0;
-	for (e = 0; tabla[e].clave!= "vacio"; e++){		
+	for (e = 0; tabla[e].clave!= "vacio" && e < configuracion->cantEntradas; e++){
+		log_info(logger, "%s", tabla[e].clave);	
 	}
 	comienzoDeEntradasLibres = e;
 	indexCircular = e;
@@ -509,34 +511,40 @@ void compactar (entrada_t * tabla){
 
 int getCantPaginas (int tamanioMensaje ){
 	int cantPaginas = 0;
+	
 	if (tamanioMensaje % configuracion->tamanioEntradas == 0){
 		cantPaginas = tamanioMensaje / configuracion->tamanioEntradas;
 	} else{
 		cantPaginas = (tamanioMensaje / configuracion->tamanioEntradas) + 1;
 	}
+
+	log_info(logger, "tamanio mensaje: %d", tamanioMensaje);
+	log_info(logger, "cantidad de entradas: %d", cantPaginas);
 	return cantPaginas;
 }
 
-void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
+void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 
 	// OJO! REVISAR, ES MUY TARDE Y ESTOY MEDIO TARADO YA...
 	
-	if (configuracion->cantEntradas - indexCircular >= *cantPaginas){ 
+	if (configuracion->cantEntradas - indexCircular >= cantPaginas){ 
 	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
 		
-		for (int i = indexCircular; i <= *cantPaginas; i++){
+		for (int i = indexCircular; i < cantPaginas; i++){
 			//guardar en tabla el tamaño del valor
 			strcpy(tabla[i].clave , mensaje->clave);
 			tabla[i].tamanio = strlen(mensaje->valor);
 			tabla[i].age = 0;				
 			guardarEnMem(mensaje, indexCircular);
 		}
-		indexCircular = indexCircular + *cantPaginas;
+		indexCircular = indexCircular + cantPaginas;
 	} else {
 	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio	
-		
+		log_info(logger, "flag= %d, ", flagCompactar);
 		switch (flagCompactar){
 			case 0 : { 
+				
+				log_info(logger, "Compactando");
 				compactar(tabla);
 				flagCompactar = 1;
 				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
@@ -550,6 +558,9 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas){
 			}
 		}						
 	}
+
+	for(int x = 0; x < configuracion->cantEntradas; x++)
+		log_info(logger, "%s", tabla[x].clave);
 }
 
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja){

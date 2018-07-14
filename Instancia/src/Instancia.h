@@ -82,7 +82,7 @@ void compactar (entrada_t * tabla);
 int getCantPaginas (int tamanioMensaje );
 int consultarTablaCIRC (entrada_t* tabla, content* mensaje);
 int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja);
-void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int* cantPaginas);
+void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas);
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja);
 
 
