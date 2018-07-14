@@ -68,7 +68,7 @@ int main(void)
     pthread_mutex_lock(&new_esi);
     un_esi = list_remove(lista_ready, 0);
     pthread_mutex_unlock(&new_esi);
-    log_warning(logger, "%s Chosen to Start", un_esi->name);
+    log_info(logger, "%s Chosen to Start", un_esi->name);
 	//Codigo del Planificador
 	while (stop != 1)
 	{    
@@ -115,7 +115,13 @@ int main(void)
                 send_esi_to_ready(un_esi);
             else
                 */finish_esi(un_esi);//pregunta si se bloqueo o finalizo o recien empieza
+
             sem_wait(&hay_esis);
+
+            //para que se pueda cerrar el programa correctamente
+            if(stop)
+                continue;
+            
             un_esi = list_remove(lista_ready, 0);
             fin_de_esi = 0;
         }
@@ -176,7 +182,7 @@ void get_string_value(t_log* logger, char* key, char* *value, t_config* config)
 
 void configure_logger()
 {
-    logger = log_create("Planificador.log", "Planificador", true, LOG_LEVEL_INFO);
+    logger = log_create("Planificador.log", "Planificador", false, LOG_LEVEL_INFO);
 }
 
 void new_blocked_keys()		//#DUDA Me hace mucho ruido el funcionamiento de esto, y los malloc con el for, cuando se liberan?
@@ -501,7 +507,7 @@ void wait_question(int socket)
         	exit_with_error(logger, "");
     }
 
-    free(message);//#DUDA: este free tira segmentation fault para la segunda vez
+    //free(message);//#DUDA: este free tira segmentation fault para la segunda vez
     free(header);
 }
 
@@ -538,7 +544,7 @@ void check_key(char * key)
 
 	if(a_key == NULL) //si no encuentra la clave en la lista, la crea
 	{
-		log_warning(logger, "Requested Key doesnt exist, Adding Key to list");
+		log_info(logger, "Requested Key doesnt exist, Adding Key to list");
         
         //#DUDA_RESPUESTA: como a_key es NULL hay que creala haciendo malloc
         a_key = malloc(sizeof(clave_bloqueada_t));
@@ -556,7 +562,7 @@ void check_key(char * key)
 
         send_header(socket_c, 31); //31 clave libre
         
-        free(nueva_clave);
+        //free(nueva_clave);
 	}
     else
     {
@@ -573,7 +579,7 @@ void check_key(char * key)
             /* REPETICION DE CODIGO /\ */
 
             send_header(socket_c, 31); //31 clave libre
-            free(nueva_clave);
+            //free(nueva_clave);
             return;
         }
 
@@ -590,7 +596,7 @@ void check_key(char * key)
         //#TODO: fijarse si un esi tiene la clave(ver esi_has_key() esta en la rama fix_operacion_set)
         // usando lista claves_bloqueadas_por_esis 
 
-        log_warning(logger, "Requested Key was taken before, Adding ESI to blocked queue");
+        log_info(logger, "Requested Key was taken before, Adding ESI to blocked queue");
 
         send_header(socket_c, 32); //32 clave bloqueada
         //block_esi(un_esi, a_key);
@@ -776,7 +782,7 @@ bool esi_has_key(char* key)
             && (string_equals_ignore_case(p->key, key)));
     }
 
-    list_any_satisfy(claves_bloqueadas_por_esi, _owns_key);
+    list_any_satisfy(claves_bloqueadas_por_esis, _owns_key);
 }
 
 void send_esi_to_ready(t_esi * un_esi)

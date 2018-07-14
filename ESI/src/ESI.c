@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
 
 void configure_logger()
 {
-  logger = log_create("ESI.log", "ESI", true, LOG_LEVEL_INFO);
+  logger = log_create("ESI.log", "ESI", false, LOG_LEVEL_INFO);
 }
 
 void check_arguments(int argc)
@@ -193,7 +193,7 @@ void send_message(int socket, int id, char * message1, char * message2)
 	}
 	if (len_message1 > 0)
 	{	
-		log_warning(logger, "Message sent: %s", message);
+		log_info(logger, "Message sent: %s", message);
 		result = send(socket, message, (len_message1 + len_message2), 0);
 	}
 	if (result <= 0)
@@ -212,13 +212,15 @@ void send_parsed_operation(t_esi_operacion parsed)
 
 		switch(parsed.keyword){
 			case GET:
-				log_warning(logger, "Operation GET");
+				log_info(logger, "Operation GET");
 				send_message(coordinator_socket, 21, parsed.argumentos.GET.clave, "");
 				break;
 			case SET:
+				log_info(logger, "Operation SET");
 				send_message(coordinator_socket, 22, parsed.argumentos.SET.clave, parsed.argumentos.SET.valor); // el ESI tambien manda el valor
 				break;
 			case STORE:
+				log_info(logger, "Operation STORE");
 				send_message(coordinator_socket, 23, parsed.argumentos.STORE.clave, "");
 				break;
 			default:
