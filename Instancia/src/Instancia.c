@@ -260,6 +260,11 @@ int revisarLista(char* clave)
 void guardarEnClaves(content_header* header, char* clave)
 {
 	//guardar en una tabla los maps
+
+	int cantPaginas = 0;
+	int tamanioMensaje = header->lenValor;
+	cantPaginas = getCantPaginas (tamanioMensaje);
+
 	int result;
 	int fd = open(clave, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
 	if (fd == -1) {
@@ -267,7 +272,7 @@ void guardarEnClaves(content_header* header, char* clave)
 		exit(EXIT_FAILURE);
 	}
 
-	result = lseek(fd, header->lenValor +1, SEEK_SET);
+	result = lseek(fd, cantPaginas*configuracion->tamanioEntradas +1, SEEK_SET);
 	if (result == -1) {
 		close(fd);
 		perror("Error en lseek()");
@@ -283,7 +288,7 @@ void guardarEnClaves(content_header* header, char* clave)
 	map_t* una_clave = (map_t*)malloc(sizeof(map_t));
 	una_clave->clave = malloc(header->lenClave + 1);
 	memcpy(una_clave->clave, clave, header->lenClave + 1);
-	una_clave->map = mmap(NULL, header->lenValor, PROT_WRITE, MAP_SHARED, fd, 0);
+	una_clave->map = mmap(NULL, cantPaginas*configuracion->tamanioEntradas, PROT_WRITE, MAP_SHARED, fd, 0);
 	if (una_clave->map == MAP_FAILED) {
 		close(fd);
 		perror("Error la mapear el archivo");
@@ -363,33 +368,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
 				}						
 				
-			}		
-			
-			///////// DESDE ACA ///////////////
-			/*
-				
-
-			// si no Hay Lugar
-			if (noHayLugar){
-				//hay que compactar
-
-				//msjAlCoordinador = "compactar"
-				send_header(coordinator_socket, 11);
-
-				//recibir del coorddinador
-
-				compactar();
-				//activar semaforo 
-
-				int posicion = consultarTabla (tabla, mensaje, strlen(mensaje->valor));
-
-			}
-			
-			guardarEnTabla (tabla, mensaje, posicion);
-			
-			*/
-			/////////// HASTA ACA ////////////////////
-
+			}				
 			
 			//guardarEnMem (mensaje, posicion);
 
