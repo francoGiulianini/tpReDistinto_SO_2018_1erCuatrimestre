@@ -55,11 +55,20 @@ typedef struct
     int fd;
 } map_t;
 
+typedef struct nodo{
+	char* dato;
+	struct nodo *siguiente;
+} nodo_t;
+   
+typedef nodo_t *ptrNodo;
+typedef nodo_t *ptrLista;
+
 t_log * logger;
 t_config * config;
 configuracion_t * configuracion;
 int coordinator_socket;
 t_list* lista_claves;
+ptrLista listaGETs;
 sem_t semCompactar;
 
 void configure_logger();
@@ -85,6 +94,9 @@ int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja);
 void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas);
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja);
 void storeKey(entrada_t * tabla, char* clave);
-void dump(entrada_t * tabla);
+void dump(entrada_t * tabla, ptrLista listaGETs);
+ptrNodo crearNodo(char* clave);
+void insertarNodo(ptrLista* lista, char* clave);
+int estaEnLaLista(ptrNodo listaGETs, char* clave);
 
 #endif
