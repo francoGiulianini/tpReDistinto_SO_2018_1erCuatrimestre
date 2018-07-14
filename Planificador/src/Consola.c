@@ -26,6 +26,7 @@ void Console(/*void *parameter*/)
 			{
 				stop = 1;
 				exit = 1;
+				sem_post(&hay_esis);
 				log_warning(logger, "The Scheduler was closed by command");
 				break;
 			}
