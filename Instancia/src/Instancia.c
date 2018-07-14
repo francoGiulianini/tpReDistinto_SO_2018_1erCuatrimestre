@@ -335,8 +335,8 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			log_info(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
 			
-			int checkClaveNoBloqueada = estaEnLaLista(listaGETs, mensaje->clave);
-			if (checkClaveNoBloqueada = 1){ // si la clave está tomada
+			/*int checkClaveNoBloqueada = estaEnLaLista(listaGETs, mensaje->clave);
+			if (checkClaveNoBloqueada = 1){ // si la clave está tomada*/
 
 				//revisar si la clave ya existe
 				if(!revisarLista(mensaje->clave))
@@ -353,10 +353,13 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					cantPaginas = getCantPaginas (tamanioMensaje);
 					// recorro la tabla hasta el comienzoDeEntradasLibres
 					int posicion = consultarTablaCIRC (tabla, mensaje);
+					
 					if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
 						int e = posicion + cantPaginas;
+						tabla[posicion].tamanio = strlen(mensaje->valor);
 						while (tabla[e].clave == mensaje->clave){
 							strcpy(tabla[e].clave, "vacio");
+							e++;
 						}
 						guardarEnMem (mensaje, posicion);
 					} else { // Si la clave no esta en la tabla
@@ -369,11 +372,15 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					cantPaginas = getCantPaginas (tamanioMensaje);
 					// recorro la tabla de punta a punta envejeciendo todo y actualizo el valor de laMasVieja
 					int posicion = consultarTablaLRU (tabla, mensaje, &laMasVieja);
+					
 					if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
 						int e = posicion + cantPaginas;
+						tabla[posicion].tamanio = strlen(mensaje->valor);
+						tabla[posicion].age = 0;
 						while (tabla[e].clave == mensaje->clave){
 							strcpy(tabla[e].clave, "vacio");
 							tabla[e].age = 0;
+							e++;
 						}
 						guardarEnMem (mensaje, posicion);
 					} else { // Si la clave no esta en la tabla
@@ -386,11 +393,11 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 				free(mensaje);
 				break;
-			}else{ //si la clave no está tomada
+			/*}else{ //si la clave no está tomada
 				// avisar al coordinador -> ERROR: Clave no bloqueada
 				log_info(logger, "ERROR: La clave %s no se encuentra tomada", mensaje->clave);
 				break;
-			}
+			}*/
 		}
 		case 13:{ //GET
 			// Intenta bloquear la clave y si no existe la crea (la agrega a la tabla).
@@ -416,21 +423,21 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
-			clave[header->lenClave + 1] = '\0';
+			clave[header->lenClave] = '\0';
 
-			int checkClaveNoBloqueada = estaEnLaLista(listaGETs, clave);
-			if (checkClaveNoBloqueada = 1){ // si la clave está tomada
+			/*int checkClaveNoBloqueada = estaEnLaLista(listaGETs, clave);
+			if (checkClaveNoBloqueada = 1){ // si la clave está tomada*/
 
 				storeKey(tabla, clave);
 			
 				//avisar al coordinador que creo el archivo (ID = 12)
 				send_header(coordinator_socket, 12);
 				break;
-			}else{ //si la clave no está tomada
+			/*}else{ //si la clave no está tomada
 				// avisar al coordinador -> ERROR: Clave no bloqueada				
 				log_info(logger, "ERROR: La clave %s no se encuentra tomada", clave);
 				break;
-			}
+			}*/
 			
 			
 
@@ -513,13 +520,15 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 	if (configuracion->cantEntradas - indexCircular >= cantPaginas){ 
 	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
 		
-		for (int i = indexCircular; i < cantPaginas; i++){
+		for (int i = indexCircular; i < (indexCircular + cantPaginas); i++){
 			//guardar en tabla el tamaño del valor
 			strcpy(tabla[i].clave , mensaje->clave);
 			tabla[i].tamanio = strlen(mensaje->valor);
-			tabla[i].age = 0;				
-			guardarEnMem(mensaje, indexCircular);
+			tabla[i].age = 0;
+			comienzoDeEntradasLibres++;
 		}
+						
+		guardarEnMem(mensaje, indexCircular);
 		indexCircular = indexCircular + cantPaginas;
 	} else {
 	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio	
