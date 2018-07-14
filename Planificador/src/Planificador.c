@@ -560,18 +560,23 @@ void check_key(char * key)
             //el primer elemento es CONSOLA
             //esta bloqueado por clave desde configuracion
             //#INTERPRETACION_DE_FRANCO La clave esta bloqueada por consola, debe seguir bloqueada hasta que sea liberada por consola
+            log_info(logger, "Requested Key is blocked from Console, Adding ESI to blocked queue");
+            
             send_header(socket_c, 32); //Clave bloqueada por consola
-            //#DUDA aunque la clave este bloqueada por consola, ¿deberia meter a la cola_esis_bloqueados el esi que la esta pidiendo en este momento? Yo creeria que si, debido al analisis de deadlock
-            return; //Yo creo que aca deberia retornar, ya que lo que viene aca abajo seria lo que sucede si la clave esta bloqueada pero no por consola, sino xq hay esis ejecutando y/o esperandola
+            
+            queue_push(a_key->cola_esis_bloqueados, un_esi);
+            
+            return;
         }
 
         //#TODO la lista tiene elementos pero pudo haber sido desbloqueada por consola
+        //#INTERPRETACION_DE_FER cuando se desbloquea por consola deberia desaparecer el elemento "CONSOLA"
         //#INTERPRETACION_DE_FRANCO Tecnicamente si ya estoy aca es xq la clave no esta bloqueada por consola, por lo que no habria nada mas que hacer ademas del comportamiento de aca abajo
 
         log_info(logger, "Requested Key was taken before, Adding ESI to blocked queue");
 
         send_header(socket_c, 32); //32 clave bloqueada
-        //block_esi(un_esi, a_key);
+
         queue_push(a_key->cola_esis_bloqueados, un_esi);
     }
 }
@@ -589,11 +594,12 @@ void unlock_key(char* key)
     {
         //desalojar clave	//#CHECK comportamiento de la consola al bloquear una key (deberia poner el "esi consola" en el primer lugar de la cola a ser popeado)
         release_key(key);	//#DUDA #TODO si la clave esta bloqueada por consola, cuando es liberada por el esi que la usaba debo chequear que el siguiente esi que estoy tomando no sea la consola. Si es asi, ¿que hago?
+                            //#RESPUESTA la consola deberia hacer eso, por ciclo normal nunca vas a liberar la clave que tiene la consola
         send_header(socket_c, 34);		//#DUDA Si un esi tiene la clave reservada y yo la bloqueo con la consola,
                                         //      se bloquea para el esi que ya la tenia reservada y la sigue usando todavia, o se bloquea para el siguiente esi que la intente tomar cuando el esi que la tenia la libera?
     }
     else //#DUDA Que un_esi no tenga reservada la clave no significa que la clave este libre (la puede tener tomada otro esi)
-    {
+    {   //#REPUESTA si pero ese ESI no puede liberar la clave que tiene otro ESI y si quiere hacerlo se aborta, pero ese chequeo lo hace el coordinador
         send_header(socket_c, 35);
         return;
     }
@@ -781,16 +787,16 @@ void refresh_waiting_time (t_list * list)
 
 void release_all_keys(t_esi * esi)
 {
-	    bool _does_esi_have_key(clave_bloqueada_por_esi_t* p)
+	bool _does_esi_have_key(clave_bloqueada_por_esi_t* p)
     {
         return string_equals_ignore_case(p->esi_id, esi->name);
     }
 
-    void * i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
+    clave_bloqueada_por_esi_t * i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
     if(i != NULL)
     {
     	free(i->esi_id);
-    	free(i->key)
+    	free(i->key);
     	free(i);
     }
 
@@ -801,7 +807,7 @@ void release_all_keys(t_esi * esi)
     	if(i != NULL)
     	{
     		free(i->esi_id);
-    		free(i->key)
+    		free(i->key);
     		free(i);
     	}
     }
@@ -815,11 +821,11 @@ void release_key(char* key)
             && (string_equals_ignore_case(p->key, key)));
     }
 
-    void * i = list_remove_by_condition(claves_bloqueadas_por_esis, _owns_key);
+    clave_bloqueada_por_esi_t * i = list_remove_by_condition(claves_bloqueadas_por_esis, _owns_key);
     if(i != NULL)
     {
     	free(i->esi_id);
-    	free(i->key)
+    	free(i->key);
     	free(i);
     }
 }
