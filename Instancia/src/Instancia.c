@@ -14,7 +14,7 @@ char* port_c;
 char* ip_c;
 char* name;
 char* algReemplazo;
-int dump;
+int dumpTimer;
 int noHayLugar;
 char* mem; //storage
 pthread_t hiloCompactar;
@@ -64,6 +64,14 @@ int main(void)
 
 		free(header);
 	}
+
+	while(1){
+		usleep(dumpTimer);
+		printf("\nHilo Dump");
+		dump(tabla);
+		printf("\nFin del Dump");
+	}
+
 	return EXIT_SUCCESS;
 }
 
@@ -85,7 +93,7 @@ void get_values_from_config(t_log* logger, t_config* config)
     get_string_value(logger, "IPCoordinador", &ip_c, config);
 	get_string_value(logger, "NombreInstancia", &name, config);
 	get_string_value(logger, "AlgoritmoReemplazo", &algReemplazo, config);
-	get_int_value(logger, "IntervaloDump", &dump, config);
+	get_int_value(logger, "IntervaloDump", &dumpTimer, config);
 }
 
 void get_int_value(t_log* logger, char* key, int *value, t_config* config)
@@ -260,6 +268,11 @@ int revisarLista(char* clave)
 void guardarEnClaves(content_header* header, char* clave)
 {
 	//guardar en una tabla los maps
+
+	int cantPaginas = 0;
+	int tamanioMensaje = header->lenValor;
+	cantPaginas = getCantPaginas (tamanioMensaje);
+
 	int result;
 	int fd = open(clave, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
 	if (fd == -1) {
@@ -267,7 +280,7 @@ void guardarEnClaves(content_header* header, char* clave)
 		exit(EXIT_FAILURE);
 	}
 
-	result = lseek(fd, header->lenValor +1, SEEK_SET);
+	result = lseek(fd, cantPaginas*configuracion->tamanioEntradas +1, SEEK_SET);
 	if (result == -1) {
 		close(fd);
 		perror("Error en lseek()");
@@ -283,7 +296,7 @@ void guardarEnClaves(content_header* header, char* clave)
 	map_t* una_clave = (map_t*)malloc(sizeof(map_t));
 	una_clave->clave = malloc(header->lenClave + 1);
 	memcpy(una_clave->clave, clave, header->lenClave + 1);
-	una_clave->map = mmap(NULL, header->lenValor, PROT_WRITE, MAP_SHARED, fd, 0);
+	una_clave->map = mmap(NULL, cantPaginas*configuracion->tamanioEntradas, PROT_WRITE, MAP_SHARED, fd, 0);
 	if (una_clave->map == MAP_FAILED) {
 		close(fd);
 		perror("Error la mapear el archivo");
@@ -363,33 +376,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
 				}						
 				
-			}		
-			
-			///////// DESDE ACA ///////////////
-			/*
-				
-
-			// si no Hay Lugar
-			if (noHayLugar){
-				//hay que compactar
-
-				//msjAlCoordinador = "compactar"
-				send_header(coordinator_socket, 11);
-
-				//recibir del coorddinador
-
-				compactar();
-				//activar semaforo 
-
-				int posicion = consultarTabla (tabla, mensaje, strlen(mensaje->valor));
-
-			}
-			
-			guardarEnTabla (tabla, mensaje, posicion);
-			
-			*/
-			/////////// HASTA ACA ////////////////////
-
+			}				
 			
 			//guardarEnMem (mensaje, posicion);
 
@@ -421,29 +408,12 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
-			clave[header->lenClave] = '\0';
+			clave[header->lenClave + 1] = '\0';			
 			
-			// tengo que obtener la posicion en memoria (lo calculo con la tabla)
-			// y el largo del valor, tambien lo saco de la tabla
-
-			int posicion = consultarTabla (tabla, clave);
-			
-			int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
-
-			//// STORE
-			map_t* una_clave = buscar_por_clave(lista_claves, clave);
-			if(una_clave == NULL)
-				log_error(logger, "ERROR");
-
-			memcpy(una_clave->map, mem + ubicacionEnMem, tabla[posicion].tamanio);
-			//msync(una_clave->map, strlen(una_clave->map), MS_SYNC);
-			///// HASTA ACA STORE								
+			storeKey(tabla, clave);
 			
 			//avisar al coordinador que creo el archivo (ID = 12)
 			send_header(coordinator_socket, 12);
-
-			free(clave);
-
 			break;
 
 			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que liberar los recursos, depues lo acomodo
@@ -453,11 +423,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
    			 close(fd);
 			*/
 		}
-	}
-	
-	clockSimulator++;
-	if (clockSimulator == dump){
-		// hacer el dump 
 	}
 }
 
@@ -593,4 +558,25 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int
 			guardarEnTablaLRU(tabla, mensaje, cantPaginas, laMasVieja);
 		}				
 	}		
+}
+
+void storeKey(entrada_t * tabla, char* clave){
+	int posicion = consultarTabla (tabla, clave);
+	if (posicion == -1){ // Si quiero hacer STORE de una key que no está más en la tabla
+		// send error to coordinator
+	}else{ // Si está en la tabla:
+		int i = posicion;			
+		int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
+
+		//// STORE
+		map_t* una_clave = buscar_por_clave(lista_claves, clave);
+		if(una_clave == NULL)
+			log_error(logger, "ERROR");
+
+		memcpy(una_clave->map, mem + ubicacionEnMem, tabla[posicion].tamanio +1 );
+	}									
+}
+
+void dump(entrada_t * tabla){
+	// hago dump de todo lo que este en tabla 
 }
