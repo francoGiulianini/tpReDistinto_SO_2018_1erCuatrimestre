@@ -17,7 +17,7 @@ char* algReemplazo;
 int dumpTimer;
 int noHayLugar;
 char* mem; //storage
-pthread_t hiloCompactar;
+pthread_t hiloDump;
 int indexCircular = 0;
 int comienzoDeEntradasLibres = 0;
 int flagCompactar = 0;
@@ -25,7 +25,7 @@ int clockSimulator = 0;
 
 int main(void)
 {
-	sem_init(&semCompactar,0,0);
+	pthread_mutex_init(&mutex_dump, NULL);
 	configure_logger();
 	config = config_create("Config.cfg");
     if(config == NULL)
@@ -46,31 +46,28 @@ int main(void)
 	}
 
 	lista_claves = list_create();
-	ptrLista listaGETs = NULL;
+	//ptrLista listaGETs = NULL; lista_claves es parecida
 
 	mem = malloc(sizeof (char) *configuracion->cantEntradas*configuracion->tamanioEntradas);
 
-	/*int error = pthread_create(&hiloCompactar, NULL, (void *)compactar, tabla);
-			if(error != 0)
-			{
-				log_error(logger, "Couldn't create thread Compactar");
-			}*/
+	int error = pthread_create(&hiloDump, NULL, (void *)dump, tabla);
+	if(error != 0)
+	{
+		log_error(logger, "Couldn't create thread Dump");
+	}
 
 	while(1)
 	{
+		pthread_mutex_lock(&mutex_dump);
+
 		content_header *header = malloc (sizeof (content_header));
 
 		recv(coordinator_socket, header, sizeof (content_header), 0);
 		procesarHeader (header, tabla);
 
 		free(header);
-	}
 
-	while(1){
-		usleep(dumpTimer);
-		printf("\nHilo Dump");
-		dump(tabla, listaGETs);
-		printf("\nFin del Dump");
+		pthread_mutex_unlock(&mutex_dump);
 	}
 
 	return EXIT_SUCCESS;
@@ -171,6 +168,8 @@ void send_hello(int socket)
 	int result = send(socket, header_c, sizeof(content_header), 0);
 	if (result <= 0)
 		exit_with_error(logger, "Cannot send Hello");
+
+	free(header_c);
 }
 
 void recibirTamanos ()
@@ -333,6 +332,8 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			memcpy(mensaje->valor, mensaje_recv + header->lenClave, header->lenValor);
 			mensaje->valor[header->lenValor] = '\0';
 
+			free(mensaje_recv);
+
 			log_info(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
 			
 			/*int checkClaveNoBloqueada = estaEnLaLista(listaGETs, mensaje->clave);
@@ -388,10 +389,16 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 					}						
 					
 				}				
-						
-				send_header(coordinator_socket, 12);
+				
+				//para que el coordinador funcione usando LSU
+				int entradas_libres = free_entries(tabla);
 
+				send_header_with_length(coordinator_socket, 12, entradas_libres, 0);
+
+				free(mensaje->clave);
+				free(mensaje->valor);
 				free(mensaje);
+
 				break;
 			/*}else{ //si la clave no está tomada
 				// avisar al coordinador -> ERROR: Clave no bloqueada
@@ -400,7 +407,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			}*/
 		}
 		case 13:{ //GET
-			// Intenta bloquear la clave y si no existe la crea (la agrega a la tabla).
+			//No hace nada
 
 			char * clave = (char*)malloc (header->lenClave + 1);
 
@@ -408,7 +415,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			//deserializar
 			clave[header->lenClave] = '\0';
 
-			insertarNodo(&listaGETs, clave);
+			//insertarNodo(&listaGETs, clave);
 
 			send_header(coordinator_socket, 12);
 
@@ -416,8 +423,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			break;
 		}
 		case 14:{ // STORE
-			//crear archivo con la clave que tenga la posicion en la tabla y el valor
-			//ver mmap
 			char * clave = (char*)malloc (header->lenClave + 1);
 			int cantEntradas = 0;
 
@@ -438,15 +443,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				log_info(logger, "ERROR: La clave %s no se encuentra tomada", clave);
 				break;
 			}*/
-			
-			
-
-			/* A esta parte la dejo comentada por ahora porque no estoy seguro de donde habria que liberar los recursos, depues lo acomodo
-			if (munmap(map, content_header->lenValor) == -1) {
-			perror("Error un-mmapping the file");
-			}
-   			 close(fd);
-			*/
 		}
 	}
 }
@@ -459,6 +455,33 @@ void send_header(int socket, int id)
     header->lenValor = 0;
         
     send(socket, header, sizeof(content_header), 0);
+
+	free(header);
+}
+
+void send_header_with_length(int socket, int id, int len1, int len2)
+{
+    content_header* header = malloc(sizeof(content_header));
+    header->id = id;
+    header->lenClave = len1;
+    header->lenValor = len2;
+        
+    send(socket, header, sizeof(content_header), 0);
+
+	free(header);
+}
+
+int free_entries(entrada_t * tabla)
+{
+	int free_entries = 0;
+
+	for(int i = 0; i < configuracion->cantEntradas; i++)
+	{
+		if(string_equals_ignore_case(tabla[i].clave, "vacio"))
+			free_entries++;
+	}
+
+	return free_entries;
 }
 
 map_t * buscar_por_clave(t_list* lista_claves, char* clave)
@@ -472,7 +495,7 @@ map_t * buscar_por_clave(t_list* lista_claves, char* clave)
 
 void compactar (entrada_t * tabla){
 
-	//sem_wait(&semCompactar);
+	//Compactar tabla
 
 	int clavesVacias = 0;
 	int j = 0;
@@ -491,6 +514,8 @@ void compactar (entrada_t * tabla){
 	}
 
 	// Una vez que se compacto, se actualiza el comienzoDeEntradasLibres
+
+	// HACER: actualizar el storage
 	int e = 0;
 	for (e = 0; tabla[e].clave!= "vacio" && e < configuracion->cantEntradas; e++){
 		log_info(logger, "%s", tabla[e].clave);	
@@ -515,7 +540,15 @@ int getCantPaginas (int tamanioMensaje ){
 
 void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 
-	// OJO! REVISAR, ES MUY TARDE Y ESTOY MEDIO TARADO YA...
+	//POSIBLEMENTE HAY QUE REHACER
+	//(indexCiruclar solo deberia usarse para reemplazar claves)
+	/*Los pasos a seguir tanto para circ y lru son:
+		1. encontrar un lugar vacio
+		2a. no hay lugar, compactar
+			3. encontrar otra vez un lugar vacio
+			4. no hay lugar, reemplazar (usando algoritmo)
+
+		2b. ubicar en ese lugar*/
 	
 	if (configuracion->cantEntradas - indexCircular >= cantPaginas){ 
 	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
@@ -593,8 +626,7 @@ void storeKey(entrada_t * tabla, char* clave){
 		// send error to coordinator
 		send_header(coordinator_socket, 15);		
 		log_info(logger, "ERROR: La clave %s ha sido reemplazada", clave);
-	}else{ // Si está en la tabla:
-		int i = posicion;			
+	}else{ // Si está en la tabla		
 		int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
 
 		//// STORE
@@ -606,16 +638,48 @@ void storeKey(entrada_t * tabla, char* clave){
 	}									
 }
 
-void dump(entrada_t * tabla, ptrNodo listaGETs){
-	// hago dump de todo lo que este en tabla
-	ptrNodo nodoAux = crearNodo(NULL);
-	nodoAux = listaGETs;
-	while (nodoAux != NULL){
-		nodoAux = nodoAux->siguiente;
-		storeKey(tabla, nodoAux->dato);
-	}
+void dump(entrada_t * tabla)
+{
+	while(true)
+	{
+		//dormir por cantidad de tiempo(en segundos) de configuracion
+		sleep(dumpTimer);
+
+		//semaforo mutex para evitar condicion de carrera
+		pthread_mutex_lock(&mutex_dump);
+
+		log_info(logger, "Starting Dump");
+
+		//por cada clave de la tabla hacer store
+		for(int i = 0; i < configuracion->cantEntradas; i++)
+		{
+			if(string_equals_ignore_case(tabla[i].clave, "vacio"))
+				continue;
+			
+			int ubicacionEnMem = i * configuracion->tamanioEntradas;
+
+			map_t* una_clave = buscar_por_clave(lista_claves, tabla[i].clave);
+			if(una_clave == NULL)
+			{
+				exit_with_error(logger, "Key is not on the list, failed to dump");
+			}
+
+			memcpy(una_clave->map, mem + ubicacionEnMem, tabla[i].tamanio +1 );
+
+			int cant_paginas = getCantPaginas(tabla[i].tamanio);
+
+			//salteo las entradas de la misma clave
+			//(menos uno porque el for me lo incrementa tambien)
+			i += cant_paginas - 1;
+		}
+
+		pthread_mutex_unlock(&mutex_dump);
+
+		log_info(logger, "Finished Dump");
+	}	
 }
 
+/* ver funciones de las commons
 ptrNodo crearNodo(char* clave){
 	ptrNodo nuevoNodo = (ptrNodo)malloc(sizeof(nodo_t));
 	if (nuevoNodo != NULL){
@@ -629,9 +693,10 @@ void insertarNodo(ptrLista* lista, char* clave){
 	ptrNodo nuevoNodo = crearNodo(clave);  
 	nuevoNodo->siguiente = *lista;
 	*lista = nuevoNodo;
-}
+}*/
 
-int estaEnLaLista(ptrNodo listaGETs, char* clave){
+//revisar_lista hace lo mismo
+/*int estaEnLaLista(ptrNodo listaGETs, char* clave){
 	ptrNodo nodoAux = crearNodo(NULL);
 	nodoAux = listaGETs;
 	while (nodoAux != NULL){
@@ -641,4 +706,4 @@ int estaEnLaLista(ptrNodo listaGETs, char* clave){
 		}
 	}
 	return 0;
-}
+}*/

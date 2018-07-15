@@ -33,6 +33,7 @@ int main(void)
     sem_init(&result_get, 0, 0);
     sem_init(&result_set, 0, 0);
 	sem_init(&result_store, 0, 0);
+    header_c = (content_header*) malloc(sizeof(content_header));
 
     configure_logger();
 
@@ -151,7 +152,7 @@ void host_connections()
             perror("send"); 
         }  
 
-        header_c = (content_header*) malloc(sizeof(content_header));
+        //header_c = (content_header*) malloc(sizeof(content_header));
         //Check if it was for closing , and also read the 
         //incoming message 
         if ((valread = recv(new_socket ,header_c, sizeof(content_header), 0)) == 0)
@@ -601,6 +602,8 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     memcpy(message->key, message_recv, header->len);
     message->key[header->len] = '\0';
 
+    free(message_recv);
+
     log_info(logger, "%s requested a GET of key: %s", name, message->key);
     //retardo de operaciones
     nanosleep(&delay_req, &time_rem);
@@ -625,11 +628,6 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
         
         dictionary_put(blocked_keys, message->key, NULL);
     } 
-  
-    //free(message->key);
-    //free(message->value);
-    ////free(message);
-    ////free(message_recv);
 }
 
 void operation_set(content_header * header, int socket, t_dictionary * blocked_keys, char* name)
@@ -809,13 +807,13 @@ void send_header(int socket, int id)
     header->len2 = 0;
         
     send(socket, header, sizeof(content_header), 0);
+
+    free(header);
 }
 
 void assign_instance(_Algorithm algorithm, t_list* instances)
 {
-    instance_t* chosen_one = malloc(sizeof(instance_t));
-
-    chosen_one = find_by_key(instances, message->key);
+    instance_t* chosen_one = find_by_key(instances, message->key);
     
     if (chosen_one != NULL) //si me devuelve un elemento es porque ya se pidio antes
     {    
@@ -828,8 +826,6 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
                 return;
         }
     }
-
-	chosen_one = malloc(sizeof(instance_t));
 
     switch(algorithm)
     {
@@ -877,17 +873,11 @@ int save_on_instance(t_list* instances)
     }
 }
 
-/*int store_on_instance(t_list* instances)
-{
-	instance_t* chosen_one = find_by_key(instances, message->key);
-}*/
-
 instance_t* add_instance_to_list(char* name, int socket)
 {
     log_info(logger, "Received Instance name: %s", name);
-    instance_t* inst_aux = (instance_t*)malloc(sizeof(instance_t));
     //agregar a diccionario de instancias
-    inst_aux = name_is_equal(instances, name);
+    instance_t* inst_aux = name_is_equal(instances, name);
     if(inst_aux != NULL)
     { //si ya esta en la lista
         log_info(logger, "Updated state of: %s", name);
