@@ -201,6 +201,8 @@ void send_message(int socket, int id, char * message1, char * message2)
 		log_error(logger, "Cannot send Payload for Message: %s, with instruction %d", message, id);
 		exit_with_error(logger, "");
 	}
+
+	free(message);
 }
 
 void send_parsed_operation(t_esi_operacion parsed)

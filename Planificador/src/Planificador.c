@@ -183,6 +183,8 @@ void new_blocked_keys()
         list_add(lista_bloqueados, clave_bloqueada);
         log_info(logger, "Updated Blocked Keys with %s", clave_bloqueada->key);
     }
+
+    free(blocked_keys);
 }
 
 void HostConnections()
@@ -528,9 +530,9 @@ void check_key(char * key)
         list_add(lista_bloqueados, a_key);
 
         clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t)); //REPETICION DE CODIGO ABAJO \/
-        nueva_clave->esi_id = malloc(id_len * sizeof(char));
+        nueva_clave->esi_id = malloc(id_len * sizeof(char) +1);
         strcpy(nueva_clave->esi_id, un_esi->name);
-        nueva_clave->key = malloc(key_len * sizeof(char));
+        nueva_clave->key = malloc(key_len * sizeof(char) +1);
         strcpy(nueva_clave->key, key);
         list_add(claves_bloqueadas_por_esis, nueva_clave); //Reservo la clave como bloqueada para que la use el esi que esta ejecutando (tecnicamente no esta bloqueada aun, eso lo hace el coordinador)
 
