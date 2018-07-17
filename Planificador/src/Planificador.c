@@ -789,46 +789,21 @@ void refresh_waiting_time (t_list * list)
 
 void release_keys_and_unlock_esis(t_esi * esi)
 {
-
-	char * clave;
-
 	bool _does_esi_have_key(clave_bloqueada_por_esi_t* p)
     {
-        clave = (char *) malloc(sizeof(char) * strlen(p->key));	//strlen cuenta el '\0'
         return string_equals_ignore_case(p->esi_id, esi->name);
     }
 
     clave_bloqueada_por_esi_t * i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
 
-    if(clave != NULL)
+    while(i != NULL)
     {
-    	unlock_esi(clave);
-    	free(clave);
-    }
-
-    if(i != NULL)
-    {
+		unlock_esi(i->key);
     	free(i->esi_id);
     	free(i->key);
     	free(i);
-    }
-
-    while(i != NULL)
-    {
+    	
     	i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
-
-        if(clave != NULL)
-    	{
-    		unlock_esi(clave);
-    		free(clave);
-    	}
-
-    	if(i != NULL)
-    	{
-    		free(i->esi_id);
-    		free(i->key);
-    		free(i);
-    	}
     }
 }
 
