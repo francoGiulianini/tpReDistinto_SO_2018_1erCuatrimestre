@@ -21,7 +21,6 @@ pthread_t hiloDump;
 int indexCircular = 0;
 int comienzoDeEntradasLibres = 0;
 int flagCompactar = 0;
-int clockSimulator = 0;
 
 int main(void)
 {
@@ -224,21 +223,6 @@ int consultarTabla (entrada_t* tabla, char* clave){
 	return -1; // Si la clave no esta en la tabla
 }
 
-/*
-void guardarEnTabla (entrada_t* tabla, content* mensaje, int posicion){
-
-	int cantPaginas = 0;
-	int tamanioMensaje = strlen(mensaje->clave);
-	cantPaginas = getCantPaginas (tamanioMensaje);
-	for (int i = posicion; i <= cantPaginas; i++){
-		memcpy (tabla[i].clave , mensaje->clave , strlen(mensaje->clave));
-		//guardar en tabla el tamaño del valor
-	}
-	
-	//actualizar archivo de clave? Dijeron que no va a hacer falta porque siempre va a ser menor o igual, nunca mayor
-}
-*/
-
 void guardarEnMem (content* mensaje, int posicion){
 
 	//////// GUARDADO EN MEMORIA
@@ -334,77 +318,68 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			free(mensaje_recv);
 
-			log_info(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);
+			log_info(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);			
 			
-			/*int checkClaveNoBloqueada = estaEnLaLista(listaGETs, mensaje->clave);
-			if (checkClaveNoBloqueada = 1){ // si la clave está tomada*/
+			//revisar si la clave ya existe
+			if(!revisarLista(mensaje->clave))
+			{
+				guardarEnClaves(header, mensaje->clave);
+				log_info(logger, "Creating file for Key: %s", mensaje->clave);
+			}
 
-				//revisar si la clave ya existe
-				if(!revisarLista(mensaje->clave))
-				{
-					guardarEnClaves(header, mensaje->clave);
-					log_info(logger, "Creating file for Key: %s", mensaje->clave);
-				}
-
-				int cantPaginas = 0;
-				int tamanioMensaje = strlen(mensaje->valor);
+			int cantPaginas = 0;
+			int tamanioMensaje = strlen(mensaje->valor);
+			
+			if (string_equals_ignore_case(algReemplazo, "CIRC")){
 				
-				if (string_equals_ignore_case(algReemplazo, "CIRC")){
-					
-					cantPaginas = getCantPaginas (tamanioMensaje);
-					// recorro la tabla hasta el comienzoDeEntradasLibres
-					int posicion = consultarTablaCIRC (tabla, mensaje);
-					
-					if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
-						int e = posicion + cantPaginas;
-						tabla[posicion].tamanio = strlen(mensaje->valor);
-						while (tabla[e].clave == mensaje->clave){
-							strcpy(tabla[e].clave, "vacio");
-							e++;
-						}
-						guardarEnMem (mensaje, posicion);
-					} else { // Si la clave no esta en la tabla
-						guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
+				cantPaginas = getCantPaginas (tamanioMensaje);
+				// recorro la tabla hasta el comienzoDeEntradasLibres
+				int posicion = consultarTablaCIRC (tabla, mensaje);
+				
+				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
+					int e = posicion + cantPaginas;
+					tabla[posicion].tamanio = strlen(mensaje->valor);
+					while (tabla[e].clave == mensaje->clave){
+						strcpy(tabla[e].clave, "vacio");
+						e++;
 					}
+					guardarEnMem (mensaje, posicion);
+				} else { // Si la clave no esta en la tabla
+					guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
+				}
+			
+			} else if (string_equals_ignore_case(algReemplazo, "LRU")){
+			
+				int laMasVieja = 0;
+				cantPaginas = getCantPaginas (tamanioMensaje);
+				// recorro la tabla de punta a punta envejeciendo todo y actualizo el valor de laMasVieja
+				int posicion = consultarTablaLRU (tabla, mensaje, &laMasVieja);
 				
-				} else if (string_equals_ignore_case(algReemplazo, "LRU")){
-				
-					int laMasVieja = 0;
-					cantPaginas = getCantPaginas (tamanioMensaje);
-					// recorro la tabla de punta a punta envejeciendo todo y actualizo el valor de laMasVieja
-					int posicion = consultarTablaLRU (tabla, mensaje, &laMasVieja);
-					
-					if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
-						int e = posicion + cantPaginas;
-						tabla[posicion].tamanio = strlen(mensaje->valor);
-						tabla[posicion].age = 0;
-						while (tabla[e].clave == mensaje->clave){
-							strcpy(tabla[e].clave, "vacio");
-							tabla[e].age = 0;
-							e++;
-						}
-						guardarEnMem (mensaje, posicion);
-					} else { // Si la clave no esta en la tabla
-						guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
-					}						
-					
-				}				
-				
-				//para que el coordinador funcione usando LSU
-				int entradas_libres = free_entries(tabla);
+				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
+					int e = posicion + cantPaginas;
+					tabla[posicion].tamanio = strlen(mensaje->valor);
+					tabla[posicion].age = 0;
+					while (tabla[e].clave == mensaje->clave){
+						strcpy(tabla[e].clave, "vacio");
+						tabla[e].age = 0;
+						e++;
+					}
+					guardarEnMem (mensaje, posicion);
+				} else { // Si la clave no esta en la tabla
+					guardarEnTablaLRU(tabla, mensaje, &cantPaginas, &laMasVieja);
+				}			
+			}				
+			
+			//para que el coordinador funcione usando LSU
+			int entradas_libres = free_entries(tabla);
 
-				send_header_with_length(coordinator_socket, 12, entradas_libres, 0);
+			send_header_with_length(coordinator_socket, 12, entradas_libres, 0);
 
-				free(mensaje->clave);
-				free(mensaje->valor);
-				free(mensaje);
+			free(mensaje->clave);
+			free(mensaje->valor);
+			free(mensaje);
 
-				break;
-			/*}else{ //si la clave no está tomada
-				// avisar al coordinador -> ERROR: Clave no bloqueada
-				log_info(logger, "ERROR: La clave %s no se encuentra tomada", mensaje->clave);
-				break;
-			}*/
+			break;
 		}
 		case 13:{ //GET
 			//No hace nada
@@ -414,8 +389,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			recv(coordinator_socket, clave, header->lenClave + 1, 0);
 			//deserializar
 			clave[header->lenClave] = '\0';
-
-			//insertarNodo(&listaGETs, clave);
 
 			send_header(coordinator_socket, 12);
 
@@ -430,19 +403,11 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			//deserializar
 			clave[header->lenClave] = '\0';
 
-			/*int checkClaveNoBloqueada = estaEnLaLista(listaGETs, clave);
-			if (checkClaveNoBloqueada = 1){ // si la clave está tomada*/
-
-				storeKey(tabla, clave);
-			
-				//avisar al coordinador que creo el archivo (ID = 12)
-				send_header(coordinator_socket, 12);
-				break;
-			/*}else{ //si la clave no está tomada
-				// avisar al coordinador -> ERROR: Clave no bloqueada				
-				log_info(logger, "ERROR: La clave %s no se encuentra tomada", clave);
-				break;
-			}*/
+			storeKey(tabla, clave);
+		
+			//avisar al coordinador que creo el archivo (ID = 12)
+			send_header(coordinator_socket, 12);
+			break;			
 		}
 	}
 }
@@ -518,7 +483,7 @@ void compactar (entrada_t * tabla){
 	// HACER: actualizar el storage
 	int e = 0;
 	for (e = 0; tabla[e].clave!= "vacio" && e < configuracion->cantEntradas; e++){
-		log_info(logger, "%s", tabla[e].clave);	
+		//log_info(logger, "%s", tabla[e].clave);	
 	}
 	comienzoDeEntradasLibres = e;
 	indexCircular = e;
@@ -563,19 +528,19 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 						
 		guardarEnMem(mensaje, indexCircular);
 		indexCircular = indexCircular + cantPaginas;
+		for(int x = 0; x < configuracion->cantEntradas; x++)
+			log_info(logger, "%s", tabla[x].clave);
 	} else {
-	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio	
-		log_info(logger, "flag= %d, ", flagCompactar);
+	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio			
 		switch (flagCompactar){
-			case 0 : { 
-				
+			case 0 : {
 				log_info(logger, "Compactando");
 				compactar(tabla);
 				flagCompactar = 1;
 				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
 				break;
 			}
-			case 1 : { 
+			case 1 : {
 				indexCircular = 0;
 				flagCompactar = 0;
 				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
@@ -583,9 +548,6 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 			}
 		}						
 	}
-
-	for(int x = 0; x < configuracion->cantEntradas; x++)
-		log_info(logger, "%s", tabla[x].clave);
 }
 
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int* cantPaginas,int* laMasVieja){
@@ -678,32 +640,3 @@ void dump(entrada_t * tabla)
 		log_info(logger, "Finished Dump");
 	}	
 }
-
-/* ver funciones de las commons
-ptrNodo crearNodo(char* clave){
-	ptrNodo nuevoNodo = (ptrNodo)malloc(sizeof(nodo_t));
-	if (nuevoNodo != NULL){
-		nuevoNodo->dato = clave;
-		nuevoNodo->siguiente = NULL;
-    } 
-	return nuevoNodo;
-}
-
-void insertarNodo(ptrLista* lista, char* clave){
-	ptrNodo nuevoNodo = crearNodo(clave);  
-	nuevoNodo->siguiente = *lista;
-	*lista = nuevoNodo;
-}*/
-
-//revisar_lista hace lo mismo
-/*int estaEnLaLista(ptrNodo listaGETs, char* clave){
-	ptrNodo nodoAux = crearNodo(NULL);
-	nodoAux = listaGETs;
-	while (nodoAux != NULL){
-		nodoAux = nodoAux->siguiente;
-		if (nodoAux->dato == clave){
-			return 1;
-		}
-	}
-	return 0;
-}*/
