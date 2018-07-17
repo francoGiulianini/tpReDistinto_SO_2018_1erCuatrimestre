@@ -516,7 +516,7 @@ Comentarios:
 void check_key(char * key)
 {
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
-    int key_len = strlen(key) + 1;
+    int key_len = strlen(key);
     int id_len = strlen(un_esi->name);
 
 	if(a_key == NULL) //si no encuentra la clave en la lista, la crea
@@ -530,9 +530,9 @@ void check_key(char * key)
         list_add(lista_bloqueados, a_key);
 
         clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t)); //REPETICION DE CODIGO ABAJO \/
-        nueva_clave->esi_id = malloc(id_len * sizeof(char) +1);
+        nueva_clave->esi_id = malloc(id_len * sizeof(char) + 1);
         strcpy(nueva_clave->esi_id, un_esi->name);
-        nueva_clave->key = malloc(key_len * sizeof(char) +1);
+        nueva_clave->key = malloc(key_len * sizeof(char) + 1);
         strcpy(nueva_clave->key, key);
         list_add(claves_bloqueadas_por_esis, nueva_clave); //Reservo la clave como bloqueada para que la use el esi que esta ejecutando (tecnicamente no esta bloqueada aun, eso lo hace el coordinador)
 
@@ -544,9 +544,9 @@ void check_key(char * key)
         if(queue_is_empty(a_key->cola_esis_bloqueados) && !is_key_blocked(key)) //la lista esta vacia y ningun esi la tiene bloqueada
         {
             clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
-            nueva_clave->esi_id = malloc(id_len * sizeof(char));
+            nueva_clave->esi_id = malloc(id_len * sizeof(char) + 1);
             strcpy(nueva_clave->esi_id, un_esi->name);
-        	nueva_clave->key = malloc(key_len * sizeof(char));
+        	nueva_clave->key = malloc(key_len * sizeof(char) + 1);
         	strcpy(nueva_clave->key, key);
 
             list_add(claves_bloqueadas_por_esis, nueva_clave);
@@ -590,8 +590,6 @@ Comentarios: Asumo que si una clave esta bloqueada por consola, tiene el "esi co
 */
 void unlock_key(char* key)
 {
-    clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
-
     if(esi_has_key(key))        //#DUDA Pedirle a Fer que me explique el comportamiento de esto
     {
         //desalojar clave	//#CHECK comportamiento de la consola al bloquear una key (deberia poner el "esi consola" en el primer lugar de la cola a ser popeado)
@@ -605,6 +603,8 @@ void unlock_key(char* key)
         send_header(socket_c, 35);
         return;
     }
+
+    clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
 
     if(queue_is_empty(a_key->cola_esis_bloqueados))
     {            
@@ -760,7 +760,7 @@ void finish_esi(t_esi * esi)
     //agregar a cola finalizados
     queue_push(finished_esis, esi);
     //Solo libero los recursos tomados si termino bien la ejecucion
-    if(!abort_esi) release_all_keys(esi);
+    if(!abort_esi) release_keys_and_unlock_esis(esi);
 
     abort_esi = 0;
 }
@@ -787,14 +787,25 @@ void refresh_waiting_time (t_list * list)
     list_iterate(lista_ready, _increase_time);
 }
 
-void release_all_keys(t_esi * esi)
+void release_keys_and_unlock_esis(t_esi * esi)
 {
+
+	char * clave;
+
 	bool _does_esi_have_key(clave_bloqueada_por_esi_t* p)
     {
+        clave = (char *) malloc(sizeof(char) * strlen(p->key));	//strlen cuenta el '\0'
         return string_equals_ignore_case(p->esi_id, esi->name);
     }
 
     clave_bloqueada_por_esi_t * i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
+
+    if(clave != NULL)
+    {
+    	unlock_esi(clave);
+    	free(clave);
+    }
+
     if(i != NULL)
     {
     	free(i->esi_id);
@@ -805,6 +816,12 @@ void release_all_keys(t_esi * esi)
     while(i != NULL)
     {
     	i = list_remove_by_condition(claves_bloqueadas_por_esis, _does_esi_have_key);
+
+        if(clave != NULL)
+    	{
+    		unlock_esi(clave);
+    		free(clave);
+    	}
 
     	if(i != NULL)
     	{
@@ -851,4 +868,47 @@ bool is_key_blocked(char* key)
     }
 
     list_any_satisfy(claves_bloqueadas_por_esis, _is_key_taken);
+}
+
+void unlock_esi(char * key)
+{
+    clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
+
+    if(queue_is_empty(a_key->cola_esis_bloqueados))
+    {            
+        return;
+    }
+
+    t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
+    
+    switch(algorithm)
+    {
+        case SJFSD:
+        case SJFCD:
+        {
+            //estimar la rafaga del esi que se libera
+            calculate_estimation(otro_esi);
+
+            log_info(logger, "New Estimation for: %s is: %f",
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+            list_add(lista_ready, otro_esi);
+            
+            //reordenar la lista de ready
+            
+            break;
+        }
+        case HRRN:
+        {
+            //no hay desalojo pero el esi desbloqueado tiene espera de 0;
+            calculate_estimation(otro_esi);
+            log_info(logger, "Estimation for: %s is: %f",
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+            otro_esi->waiting_time = 0;
+            list_add(lista_ready, otro_esi);
+            
+            break;
+        }
+    }
 }

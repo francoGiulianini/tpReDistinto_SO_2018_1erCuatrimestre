@@ -101,9 +101,10 @@ void send_esi_to_ready(t_esi * un_esi);
 void finish_esi(t_esi * esi);
 _Algorithm to_algorithm(char* string);
 float response_ratio(t_esi * p);
-void release_all_keys(t_esi * esi);
+void release_keys_and_unlock_esis(t_esi * esi);
 void release_key(char * key);
 bool esi_has_key(char* key);
 bool is_key_blocked(char* key);
+void unlock_esi(char * key);
 
 #endif /* PLANIFICADOR_H_ */
