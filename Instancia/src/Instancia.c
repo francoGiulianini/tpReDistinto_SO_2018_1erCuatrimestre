@@ -39,7 +39,7 @@ int main(void)
 
 	/* inicializamos la tabla */
 	entrada_t tabla[configuracion->cantEntradas];
-	for (int i = 0; i <= configuracion->cantEntradas; i++){
+	for (int i = 0; i < configuracion->cantEntradas; i++){
 		strcpy(tabla[i].clave, "vacio");
 		tabla[i].age = 0;
 	}
@@ -338,9 +338,11 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				
 				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
 					int e = posicion + cantPaginas;
+					log_info(logger, "La clave ya existe, el valor de e es: %d", e);
 					tabla[posicion].tamanio = strlen(mensaje->valor);
-					while (tabla[e].clave == mensaje->clave){
+					while (0 == strcmp(tabla[e].clave, mensaje->clave)){
 						strcpy(tabla[e].clave, "vacio");
+						log_info(logger, "valor en la tabla (deberia ser vacio): %s", tabla[e].clave);
 						e++;
 					}
 					guardarEnMem (mensaje, posicion);
@@ -464,26 +466,33 @@ void compactar (entrada_t * tabla){
 
 	int clavesVacias = 0;
 	int j = 0;
-	for (int i = 0; i <= configuracion->cantEntradas; i++){
-		if (tabla[i].clave == "vacio"){
+	for (int i = 0; i < configuracion->cantEntradas; i++){
+		if (0 == strcmp(tabla[i].clave, "vacio")){
 			//int clavesVacias = 1;
-			int j = i;
-			while ((tabla[j].clave == "vacio") && (j <= configuracion->cantEntradas)){
+			j = i;
+			while ((0 == strcmp(tabla[j].clave, "vacio")) && (j < configuracion->cantEntradas)){
 				clavesVacias++;
 				j++;
 			}
-			for (int j = i; j+clavesVacias ; j++){
-				tabla[j].clave == tabla[j+clavesVacias].clave;
-			}
-		}	
+			
+			int k = i+clavesVacias;
+			for (int x = i; x < k ; x++){
+				if ((x+clavesVacias) < configuracion->cantEntradas){
+					strcpy(tabla[x].clave, tabla[x+clavesVacias].clave);
+					strcpy(tabla[x+clavesVacias].clave, "vacio");
+				}
+				
+			}			
+		}
+		clavesVacias = 0;	
 	}
 
 	// Una vez que se compacto, se actualiza el comienzoDeEntradasLibres
 
 	// HACER: actualizar el storage
 	int e = 0;
-	for (e = 0; tabla[e].clave!= "vacio" && e < configuracion->cantEntradas; e++){
-		//log_info(logger, "%s", tabla[e].clave);	
+	while (0 != strcmp(tabla[e].clave, "vacio") && e < configuracion->cantEntradas){
+		e++;
 	}
 	comienzoDeEntradasLibres = e;
 	indexCircular = e;
