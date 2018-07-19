@@ -16,7 +16,6 @@ fd_set read_fds;
 int master_socket, new_socket;
 int addrlen = sizeof(serverAddress);
 char * welcome_message = "Welcome";
-content_header * header_c;
 int just_disconnected = 0;
 int instance_pointer = 0;
 int key_is_not_blocked = 1;
@@ -34,6 +33,7 @@ int main(void)
     sem_init(&result_set, 0, 0);
 	sem_init(&result_store, 0, 0);
     header_c = (content_header*) malloc(sizeof(content_header));
+    message = (message_content*) malloc(sizeof(message_content));
 
     configure_logger();
 
@@ -41,7 +41,11 @@ int main(void)
     if(config == NULL)
         exit_with_error(logger, "Cannot open config file");
 
-    get_config_values(config);   
+    get_config_values(config);
+
+    max_storage_size = config_instance->number * config_instance->size;
+    message->key = malloc(MAX_KEY_LENGTH);
+    message->value = malloc(max_storage_size);   
 
     instances = list_create();
 
@@ -468,10 +472,6 @@ void host_scheduler(void* arg)
                 break;
             }
         }
-
-        ////free(header->id);
-        ////free(header->len);
-        ////free(header->len2);
         free(header);
     }
 }
@@ -595,8 +595,8 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     }
 
     char* message_recv = (char*)malloc(header->len + header->len2);
-    message = (message_content*) malloc(sizeof(message_content));
-    message->key = malloc(header->len + 1);
+    //message = (message_content*) malloc(sizeof(message_content));
+    message->key = realloc(message->key, header->len + 1);
 
     recv(socket, message_recv, header->len, 0);
     memcpy(message->key, message_recv, header->len);
@@ -633,9 +633,15 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
 void operation_set(content_header * header, int socket, t_dictionary * blocked_keys, char* name)
 {  
     char* message_recv = malloc(header->len + header->len2);
-    message = (message_content*)malloc(sizeof(message_content));
-    message->key = malloc(header->len + 1);
-    message->value = malloc(header->len2 + 1);
+    //message = (message_content*)malloc(sizeof(message_content));
+    message->key = realloc(message->key, header->len + 1);
+
+    if(header->len2 > max_storage_size)
+    {
+        log_warning(logger, "Value size is too big, change the storage size to store correctly");
+        header->len2 = max_storage_size;
+    }
+    message->value = realloc(message->value, header->len2 + 1);
 
     recv(socket, message_recv, header->len + header->len2, 0);
 
@@ -644,6 +650,8 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     message->key[header->len] = '\0';
     memcpy(message->value, message_recv + header->len, header->len2);
     message->value[header->len2] = '\0';
+
+    free(message_recv);
 
     log_info(logger, "%s requested a SET of Key: %s, with Value: %s", name, message->key, message->value);
     //retardo de operaciones
@@ -688,26 +696,23 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
         log_info(logger, "Operation Successful");
         send_header(socket, 23); //operacion con exito
     }
-
-    //free(message->key);
-    //free(message->value);
-    //free(message);
-    //free(message_recv); 
 }
 
 void operation_store(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    message = (message_content*) malloc(sizeof(message_content));
+    //message = (message_content*) malloc(sizeof(message_content));
     char* message_recv = malloc(header->len + header->len2);
+    message->key = realloc(message->key, header->len + 1);
 
     int result = recv(socket, message_recv, header->len, 0);
     if(result <= 0)
         perror("Recv:");
 
-    //deserealizacion
-    message->key = malloc(header->len + 1);
+    //deserealizacion   
     memcpy(message->key, message_recv, header->len);
     message->key[header->len] = '\0';
+
+    free(message_recv);
 
     log_info(logger, "%s requested a STORE of key: %s", name, message->key);
     //retardo de operacion
