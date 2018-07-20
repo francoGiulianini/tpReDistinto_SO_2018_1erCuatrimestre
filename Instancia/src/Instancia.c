@@ -14,6 +14,7 @@ char* port_c;
 char* ip_c;
 char* name;
 char* algReemplazo;
+char* file_path;
 int dumpTimer;
 int noHayLugar;
 char* mem; //storage
@@ -30,6 +31,9 @@ int main(void)
     if(config == NULL)
         exit_with_error(logger, "Cannot open config file");
     get_values_from_config(logger, config);
+
+	mkdir_p(file_path);
+
 	coordinator_socket = connect_to_server(ip_c, port_c, "Coordinator");
 	send_hello(coordinator_socket);
 	
@@ -57,16 +61,15 @@ int main(void)
 
 	while(1)
 	{
-		pthread_mutex_lock(&mutex_dump);
-
 		content_header *header = malloc (sizeof (content_header));
 
 		recv(coordinator_socket, header, sizeof (content_header), 0);
+
+		pthread_mutex_lock(&mutex_dump);
 		procesarHeader (header, tabla);
+		pthread_mutex_unlock(&mutex_dump);
 
 		free(header);
-
-		pthread_mutex_unlock(&mutex_dump);
 	}
 
 	return EXIT_SUCCESS;
@@ -90,6 +93,7 @@ void get_values_from_config(t_log* logger, t_config* config)
     get_string_value(logger, "IPCoordinador", &ip_c, config);
 	get_string_value(logger, "NombreInstancia", &name, config);
 	get_string_value(logger, "AlgoritmoReemplazo", &algReemplazo, config);
+	get_string_value(logger, "PuntoMontaje", &file_path, config);
 	get_int_value(logger, "IntervaloDump", &dumpTimer, config);
 }
 
@@ -283,11 +287,17 @@ void guardarEnClaves(content_header* header, char* clave)
 	//guardar en una tabla los maps
 
 	int cantPaginas = 0;
-	int tamanioMensaje = header->lenValor;
-	cantPaginas = getCantPaginas (tamanioMensaje);
+	int tamanioMensaje = header->lenValor - 1;
+	cantPaginas = getCantPaginas(tamanioMensaje);
+
+	int file_name_size = strlen(file_path) + strlen(clave);
+	char* file_name = malloc(file_name_size + 1);
+	strcpy(file_name, file_path);
+	strcat(file_name, clave);
+	file_name[file_name_size] = '\0';
 
 	int result;
-	int fd = open(clave, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
+	int fd = open(file_name, O_RDWR | O_CREAT | O_TRUNC, (mode_t)0600);
 	if (fd == -1) {
 		perror("Error al intentar abrir el archivo");
 		exit(EXIT_FAILURE);
@@ -319,6 +329,7 @@ void guardarEnClaves(content_header* header, char* clave)
 
 	//quizas seria mejor un diccionario
 	list_add(lista_claves, una_clave);
+	free(file_name);
 }
 
 void procesarHeader (content_header* header, entrada_t* tabla){
@@ -367,7 +378,9 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				
 				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
 					int e = posicion + cantPaginas;
+
 					log_info(logger, "La clave ya existe en la posicion %d de la tabla", e);
+
 					tabla[posicion].tamanio = strlen(mensaje->valor);
 					while (0 == strcmp(tabla[e].clave, mensaje->clave)){
 						strcpy(tabla[e].clave, "vacio");
@@ -544,7 +557,7 @@ void compactar (entrada_t * tabla){
 		}
 }
 
-int getCantPaginas (int tamanioMensaje ){
+int getCantPaginas (int tamanioMensaje){
 	int cantPaginas = 0;
 	
 	if (tamanioMensaje % configuracion->tamanioEntradas == 0){
@@ -683,7 +696,7 @@ void dump(entrada_t * tabla)
 				exit_with_error(logger, "Key is not on the list, failed to dump");
 			}
 
-			memcpy(una_clave->map, mem + ubicacionEnMem, tabla[i].tamanio +1 );
+			memcpy(una_clave->map, mem + ubicacionEnMem, tabla[i].tamanio);
 
 			int cant_paginas = getCantPaginas(tabla[i].tamanio);
 
@@ -696,4 +709,43 @@ void dump(entrada_t * tabla)
 
 		log_info(logger, "Finished Dump");
 	}	
+}
+
+int mkdir_p(const char *path)
+{
+    /* cough stolen cough from https://gist.github.com/JonathonReinhart/8c0d90191c38af2dcadb102c4e202950*/
+    const size_t len = strlen(path);
+    char _path[PATH_MAX];
+    char *p; 
+
+    errno = 0;
+
+    /* Copy string so its mutable */
+    if (len > sizeof(_path)-1) {
+        errno = ENAMETOOLONG;
+        return -1; 
+    }   
+    strcpy(_path, path);
+
+    /* Iterate the string */
+    for (p = _path + 1; *p; p++) {
+        if (*p == '/') {
+            /* Temporarily truncate */
+            *p = '\0';
+
+            if (mkdir(_path, S_IRWXU) != 0) {
+                if (errno != EEXIST)
+                    return -1; 
+            }
+
+            *p = '/';
+        }
+    }   
+
+    if (mkdir(_path, S_IRWXU) != 0) {
+        if (errno != EEXIST)
+            return -1; 
+    }   
+
+    return 0;
 }

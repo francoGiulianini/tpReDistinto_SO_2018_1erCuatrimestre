@@ -18,9 +18,11 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <limits.h>     /* PATH_MAX */
+#include <sys/stat.h>   /* mkdir(2) */
+#include <errno.h>
 
 #define WELCOME_MSG 8
-#define FILE_SIZE 1024 //en bytes
 
 typedef struct
 {
@@ -103,5 +105,6 @@ void dump(entrada_t * tabla);
 ptrNodo crearNodo(char* clave);
 void insertarNodo(ptrLista* lista, char* clave);
 int estaEnLaLista(ptrNodo listaGETs, char* clave);
+int mkdir_p(const char *path);
 
 #endif
