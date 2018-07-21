@@ -214,15 +214,18 @@ void send_parsed_operation(t_esi_operacion parsed)
 
 		switch(parsed.keyword){
 			case GET:
-				log_info(logger, "Operation GET");
+				log_info(logger, "GET %s", parsed.argumentos.GET.clave);
+				printf("GET %s\n", parsed.argumentos.GET.clave);
 				send_message(coordinator_socket, 21, parsed.argumentos.GET.clave, "");
 				break;
 			case SET:
-				log_info(logger, "Operation SET");
+				log_info(logger, "SET %s %s", parsed.argumentos.SET.clave, parsed.argumentos.SET.valor);
+				printf("SET %s %s\n", parsed.argumentos.SET.clave, parsed.argumentos.SET.valor);
 				send_message(coordinator_socket, 22, parsed.argumentos.SET.clave, parsed.argumentos.SET.valor); // el ESI tambien manda el valor
 				break;
 			case STORE:
-				log_info(logger, "Operation STORE");
+				log_info(logger, "STORE %s", parsed.argumentos.STORE.clave);
+				printf("STORE %s\n", parsed.argumentos.STORE.clave);
 				send_message(coordinator_socket, 23, parsed.argumentos.STORE.clave, "");
 				break;
 			default:

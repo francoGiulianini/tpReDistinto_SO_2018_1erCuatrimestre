@@ -224,6 +224,20 @@ void unlock_key_by_console(char* key)
 		return;
 	}
 
+	bool _is_the_key(clave_bloqueada_por_esi_t * p)
+	{
+		log_info(logger, "key blocked: %s key to unlock: %s", p->key, key);
+		return string_equals_ignore_case(p->key, key);
+	}
+
+	clave_bloqueada_por_esi_t * blocked_key = list_remove_by_condition(claves_bloqueadas_por_esis, _is_the_key);
+    if(blocked_key != NULL)
+    {
+    	free(blocked_key->esi_id);
+    	free(blocked_key->key);
+    	free(blocked_key);
+    }
+
 	if(queue_is_empty(a_key->cola_esis_bloqueados))
 	{
 		return;
@@ -231,10 +245,17 @@ void unlock_key_by_console(char* key)
 
 	t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
 	if(string_equals_ignore_case(otro_esi->name, "CONSOLA"))
-		return;
+	{
+		if(queue_is_empty(a_key->cola_esis_bloqueados))
+			return;
+
+		otro_esi = queue_pop(a_key->cola_esis_bloqueados);
+	}
 
 	//OJO CON SJF CON DESALOJO
 	calculate_estimation(otro_esi);
+	log_info(logger, "New Estimation for: %s is: %f", otro_esi->name, otro_esi->cpu_time_estimated);
+
 	list_add(lista_ready, otro_esi);
 
 	sort_list_by_algorithm(lista_ready);

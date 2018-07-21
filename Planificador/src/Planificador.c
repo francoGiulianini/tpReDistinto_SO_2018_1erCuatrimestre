@@ -15,7 +15,7 @@ pthread_t idHostConnections;
 struct sockaddr_in serverAddress;
 int fin_de_esi = 0;
 int respuesta_ok = 1;
-//int key_blocked = 0;
+bool block = false;
 int abort_esi = 0;
 
 int main(void)
@@ -518,6 +518,7 @@ void check_key(char * key)
     clave_bloqueada_t* a_key = find_by_key(lista_bloqueados, key);
     int key_len = strlen(key);
     int id_len = strlen(un_esi->name);
+    block = false;
 
 	if(a_key == NULL) //si no encuentra la clave en la lista, la crea
 	{
@@ -535,26 +536,34 @@ void check_key(char * key)
         nueva_clave->key = malloc(key_len * sizeof(char) + 1);
         strcpy(nueva_clave->key, key);
         list_add(claves_bloqueadas_por_esis, nueva_clave); //Reservo la clave como bloqueada para que la use el esi que esta ejecutando (tecnicamente no esta bloqueada aun, eso lo hace el coordinador)
+        log_info(logger, "New key blocked: %s by %s ",nueva_clave->key, nueva_clave->esi_id);
+        log_all_blocked_keys(logger, claves_bloqueadas_por_esis);
 
         send_header(socket_c, 31); //31 clave libre
         return;
 	}
     else
     {
-        if(queue_is_empty(a_key->cola_esis_bloqueados) && !is_key_blocked(key)) //la lista esta vacia y ningun esi la tiene bloqueada
+        if(queue_is_empty(a_key->cola_esis_bloqueados)) //la lista esta vacia y ningun esi la tiene bloqueada
         {
-            clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
-            nueva_clave->esi_id = malloc(id_len * sizeof(char) + 1);
-            strcpy(nueva_clave->esi_id, un_esi->name);
-        	nueva_clave->key = malloc(key_len * sizeof(char) + 1);
-        	strcpy(nueva_clave->key, key);
+            int block = is_key_blocked(key);
 
-            list_add(claves_bloqueadas_por_esis, nueva_clave);
-            log_info(logger, "New key blocked: %s by %s: ",nueva_clave->key, nueva_clave->esi_id);
-            /* REPETICION DE CODIGO /\ */
+            if(!block)
+            {
+                clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
+                nueva_clave->esi_id = malloc(id_len * sizeof(char) + 1);
+                strcpy(nueva_clave->esi_id, un_esi->name);
+                nueva_clave->key = malloc(key_len * sizeof(char) + 1);
+                strcpy(nueva_clave->key, key);
 
-            send_header(socket_c, 31); //31 clave libre
-            return;
+                list_add(claves_bloqueadas_por_esis, nueva_clave);
+                log_info(logger, "New key blocked: %s by %s ",nueva_clave->key, nueva_clave->esi_id);
+                log_all_blocked_keys(logger, claves_bloqueadas_por_esis);
+                /* REPETICION DE CODIGO /\ */
+
+                send_header(socket_c, 31); //31 clave libre
+                return;
+            }
         }
 
         t_esi* one_esi = queue_peek(a_key->cola_esis_bloqueados);
@@ -568,6 +577,7 @@ void check_key(char * key)
             send_header(socket_c, 32); //Clave bloqueada por consola
             
             queue_push(a_key->cola_esis_bloqueados, un_esi);
+            block = true;
             
             return;
         }
@@ -581,6 +591,7 @@ void check_key(char * key)
         send_header(socket_c, 32); //32 clave bloqueada
 
         queue_push(a_key->cola_esis_bloqueados, un_esi);
+        block = true;
     }
 }
 
@@ -758,6 +769,10 @@ void send_esi_to_ready(t_esi * un_esi)
 
 void finish_esi(t_esi * esi)
 {
+    if(block)
+        return;
+
+    log_info(logger, "Adding %s to finished queue", esi->name);
     //agregar a cola finalizados
     queue_push(finished_esis, esi);
     //Solo libero los recursos tomados si termino bien la ejecucion
@@ -836,15 +851,27 @@ bool esi_has_key(char* key)
     list_any_satisfy(claves_bloqueadas_por_esis, _owns_key);
 }
 
-bool is_key_blocked(char* key)
+int is_key_blocked(char* key)
 {
-    bool _is_key_taken(clave_bloqueada_por_esi_t* p)
+    int _is_key_taken(clave_bloqueada_por_esi_t* p)
     {
-        log_info(logger, "key to check: %s key: to block: %s", p->key, key);
+        log_info(logger, "key to check: %s key to block: %s", p->key, key);
         return string_equals_ignore_case(p->key, key);
     }
 
-    list_any_satisfy(claves_bloqueadas_por_esis, _is_key_taken);
+    return list_any_satisfy(claves_bloqueadas_por_esis, _is_key_taken);
+}
+
+void log_all_blocked_keys(t_log * logger, t_list * claves_bloqueadas_por_esis)
+{
+    log_info(logger, "List of blocked keys");
+
+    void _log_this(clave_bloqueada_por_esi_t * p)
+    {
+        log_info(logger, "%s", p->key);
+    }
+
+    list_iterate(claves_bloqueadas_por_esis, _log_this);
 }
 
 void unlock_esi(char * key)

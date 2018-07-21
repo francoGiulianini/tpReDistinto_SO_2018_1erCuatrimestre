@@ -104,7 +104,8 @@ float response_ratio(t_esi * p);
 void release_keys_and_unlock_esis(t_esi * esi);
 void release_key(char * key);
 bool esi_has_key(char* key);
-bool is_key_blocked(char* key);
+int is_key_blocked(char* key);
+void log_all_blocked_keys(t_log * logger, t_list * claves_bloqueadas_por_esis);
 void unlock_esi(char * key);
 
 #endif /* PLANIFICADOR_H_ */

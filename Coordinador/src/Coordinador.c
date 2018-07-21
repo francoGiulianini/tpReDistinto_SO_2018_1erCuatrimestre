@@ -590,8 +590,9 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
 {
     if(header->len > MAX_KEY_LENGTH)
     {
-        log_error(logger, "Key exceeds 40 characters, aborting");
+        log_error(logger, "Key exceeds 40 characters, aborting ESI");
         abort_esi(socket);
+        return;
     }
 
     char* message_recv = (char*)malloc(header->len + header->len2);
@@ -605,6 +606,7 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     free(message_recv);
 
     log_info(logger, "%s requested a GET of key: %s", name, message->key);
+   
     //retardo de operaciones
     nanosleep(&delay_req, &time_rem);
 
@@ -654,6 +656,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     free(message_recv);
 
     log_info(logger, "%s requested a SET of Key: %s, with Value: %s", name, message->key, message->value);
+
     //retardo de operaciones
     nanosleep(&delay_req, &time_rem);
 
@@ -715,6 +718,7 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
     free(message_recv);
 
     log_info(logger, "%s requested a STORE of key: %s", name, message->key);
+
     //retardo de operacion
     nanosleep(&delay_req, &time_rem);
 
@@ -891,7 +895,7 @@ instance_t* add_instance_to_list(char* name, int socket)
     { //si no esta en la lista
         inst_aux = (instance_t*)malloc(sizeof(instance_t)); 
         inst_aux->name = name;
-        inst_aux->free_space = 0;
+        inst_aux->free_space = 999;
 		inst_aux->letter_min = 0;
 		inst_aux->letter_max = 0;
         inst_aux->keys = dictionary_create();
@@ -1052,7 +1056,7 @@ instance_t* find_by_free_space(t_list* lista)
 	}
 	bool _lower_than_the_next(instance_t* p, instance_t* q)
 	{
-		if (p->free_space > q->free_space)
+		if (p->free_space >= q->free_space)
 			return true;
 		else
 			return false;
