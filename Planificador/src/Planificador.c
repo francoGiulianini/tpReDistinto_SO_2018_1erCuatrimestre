@@ -98,14 +98,27 @@ int main(void)
         if(fin_de_esi)
         {
         	finish_esi(un_esi);
+
+            log_info(logger, "Waiting for new ESI");
             sem_wait(&hay_esis);
+            log_info(logger, "Got new ESI");
 
             pthread_mutex_lock(&pause_mutex);
             if(stop)        //para que se pueda cerrar el programa correctamente
                 continue;
 
             sort_list_by_algorithm(lista_ready);
+
+            pthread_mutex_lock(&new_esi);
+            void _log_all_ready_a(t_esi* p)
+	        {
+		        log_info(logger, "In Ready queue: %s", p->name);
+	        }
+	        list_iterate(lista_ready, _log_all_ready_a);
             un_esi = list_remove(lista_ready, 0);
+            log_info(logger, "From Ready: %s", un_esi->name);
+            pthread_mutex_unlock(&new_esi);
+
             fin_de_esi = 0;
             pthread_mutex_unlock(&pause_mutex);
         }
@@ -352,18 +365,21 @@ void HostConnections()
 
                     if(header->id == 22)
                     {
+                        log_info(logger, "ESI executed correctly");
                         respuesta_ok = 1;
                         sem_post(&esi_respuesta);
                     }
                     
                     if(header->id == 23)
                     {
+                        log_info(logger, "ESI executed incorrectly");
                         respuesta_ok = 0;
                         sem_post(&esi_respuesta);
                     }
 
                     if(header->id == 24) //esi termino ejecucion
                     {
+                        log_info(logger, "ESI completed all instructions");
                         fin_de_esi = 1;
                         respuesta_ok = 1;
                         abort_esi = 1;

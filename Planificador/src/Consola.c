@@ -213,7 +213,11 @@ void block_esi_by_console(char * key, char * id)
 
 void unlock_key_by_console(char* key)
 {
-	pthread_mutex_lock(&cola_bloqueados_mutex);
+	void _log_all_ready_b(t_esi* p)
+	{
+		log_info(logger, "In Ready queue before unlocking: %p", p->name);
+	}
+	list_iterate(lista_ready, _log_all_ready_b);
 
 	clave_bloqueada_t* a_key = (clave_bloqueada_t*)malloc(sizeof(clave_bloqueada_t));
 	a_key = find_by_key(lista_bloqueados, key);
@@ -221,7 +225,6 @@ void unlock_key_by_console(char* key)
 	if(a_key == NULL)
 	{
 		printf("Requested Key doesnt exist\n");
-		pthread_mutex_unlock(&cola_bloqueados_mutex);
 		return;
 	}
 
@@ -241,7 +244,6 @@ void unlock_key_by_console(char* key)
 
 	if(queue_is_empty(a_key->cola_esis_bloqueados))
 	{
-		pthread_mutex_unlock(&cola_bloqueados_mutex);
 		return;
 	}
 
@@ -250,21 +252,12 @@ void unlock_key_by_console(char* key)
 	{
 		if(queue_is_empty(a_key->cola_esis_bloqueados))
 		{
-			pthread_mutex_unlock(&cola_bloqueados_mutex);
 			return;
 		}
 
 		otro_esi = queue_pop(a_key->cola_esis_bloqueados);
 	}
 
-	//OJO CON SJF CON DESALOJO
-	/*calculate_estimation(otro_esi);
-	log_info(logger, "New Estimation for: %s is: %f", otro_esi->name, otro_esi->cpu_time_estimated);
-
-	list_add(lista_ready, otro_esi);
-
-	sort_list_by_algorithm(lista_ready);
-	sem_post(&hay_esis);*/
 	switch(algorithm)
     {
         case SJFSD:
@@ -281,20 +274,7 @@ void unlock_key_by_console(char* key)
             
             break;
         }
-        case SJFCD: //Precondicion: Asumo que no existe ESI en la cola de ready con rafaga mas corta que un_esi, por lo tanto:
-        /*
-        
-		Comportamiento del SJFCD:
-
-        1. calcular estimacion del otro_esi
-        2. Chequear si otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated,
-            2.1 Si es cierto:
-                2.1.1 Mandar un_esi a lista_ready,
-                2.1.2 Meter a otro_esi en ejecución,
-            2.2 Si es falso:
-            	2.2.1 Mandar otro_esi a lista_ready,
-
-        */
+        case SJFCD:         
         {
             calculate_estimation(otro_esi);		//revisar estimaciones de un_esi y el que se libera
 
@@ -327,10 +307,14 @@ void unlock_key_by_console(char* key)
             break;
         }
     }
-    sort_list_by_algorithm(lista_ready);		//Independientemente de los casos, reordeno lista_ready
-    sem_post(&hay_esis);
-
-	pthread_mutex_unlock(&cola_bloqueados_mutex);
+    //sort_list_by_algorithm(lista_ready);		//Independientemente de los casos, reordeno lista_ready
+    
+	void _log_all_ready_a(t_esi* p)
+	{
+		log_info(logger, "In Ready queue after unlocking: %s", p->name);
+	}
+	list_iterate(lista_ready, _log_all_ready_a);
+	sem_post(&hay_esis);
 }
 
 void list_blocked_esis(char* resource)
