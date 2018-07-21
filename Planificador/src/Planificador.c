@@ -523,7 +523,7 @@ void check_key(char * key)
 	{
 		log_info(logger, "Requested Key doesnt exist, Adding Key to list");
         a_key = malloc(sizeof(clave_bloqueada_t));
-        a_key->key = malloc(key_len * sizeof(char));
+        a_key->key = malloc(key_len * sizeof(char) + 1);
         strcpy(a_key->key, key);
         a_key->cola_esis_bloqueados = queue_create();
 
@@ -550,6 +550,7 @@ void check_key(char * key)
         	strcpy(nueva_clave->key, key);
 
             list_add(claves_bloqueadas_por_esis, nueva_clave);
+            log_info(logger, "New key blocked: %s by %s: ",nueva_clave->key, nueva_clave->esi_id);
             /* REPETICION DE CODIGO /\ */
 
             send_header(socket_c, 31); //31 clave libre
@@ -839,6 +840,7 @@ bool is_key_blocked(char* key)
 {
     bool _is_key_taken(clave_bloqueada_por_esi_t* p)
     {
+        log_info(logger, "key to check: %s key: to block: %s", p->key, key);
         return string_equals_ignore_case(p->key, key);
     }
 
