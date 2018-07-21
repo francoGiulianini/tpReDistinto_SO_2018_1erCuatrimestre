@@ -258,13 +258,77 @@ void unlock_key_by_console(char* key)
 	}
 
 	//OJO CON SJF CON DESALOJO
-	calculate_estimation(otro_esi);
+	/*calculate_estimation(otro_esi);
 	log_info(logger, "New Estimation for: %s is: %f", otro_esi->name, otro_esi->cpu_time_estimated);
 
 	list_add(lista_ready, otro_esi);
 
 	sort_list_by_algorithm(lista_ready);
-	sem_post(&hay_esis);
+	sem_post(&hay_esis);*/
+	switch(algorithm)
+    {
+        case SJFSD:
+        {
+            //estimar la rafaga del esi que se libera
+            calculate_estimation(otro_esi);
+
+            log_info(logger, "New Estimation for: %s is: %f",
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+            list_add(lista_ready, otro_esi);
+            
+            //reordenar la lista de ready
+            
+            break;
+        }
+        case SJFCD: //Precondicion: Asumo que no existe ESI en la cola de ready con rafaga mas corta que un_esi, por lo tanto:
+        /*
+        
+		Comportamiento del SJFCD:
+
+        1. calcular estimacion del otro_esi
+        2. Chequear si otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated,
+            2.1 Si es cierto:
+                2.1.1 Mandar un_esi a lista_ready,
+                2.1.2 Meter a otro_esi en ejecución,
+            2.2 Si es falso:
+            	2.2.1 Mandar otro_esi a lista_ready,
+
+        */
+        {
+            calculate_estimation(otro_esi);		//revisar estimaciones de un_esi y el que se libera
+
+            log_info(logger, "Estimation for: %s is: %f",
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+
+            if (otro_esi->cpu_time_estimated < un_esi->cpu_time_estimated)
+            {
+            	list_add(lista_ready, un_esi);
+                un_esi = otro_esi; //un_esi siempre es el ESI que se está ejecutando
+            }
+            else
+            {
+            	list_add(lista_ready, otro_esi);
+            }          
+
+            break;
+        }
+        case HRRN:
+        {
+            //no hay desalojo pero el esi desbloqueado tiene espera de 0;
+            calculate_estimation(otro_esi);
+            log_info(logger, "Estimation for: %s is: %f",
+                otro_esi->name, otro_esi->cpu_time_estimated);
+
+            otro_esi->waiting_time = (float)0;
+            list_add(lista_ready, otro_esi);
+            
+            break;
+        }
+    }
+    sort_list_by_algorithm(lista_ready);		//Independientemente de los casos, reordeno lista_ready
+    sem_post(&hay_esis);
 
 	pthread_mutex_unlock(&cola_bloqueados_mutex);
 }

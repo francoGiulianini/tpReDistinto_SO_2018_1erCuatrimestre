@@ -78,8 +78,16 @@ void get_config_values(t_config* config)
     {
         delay = config_get_int_value(config, "Retardo");
         log_info(logger, "Delay(in miliseconds) from config file: %d", delay);
-        delay_req.tv_sec = 0;
-        delay_req.tv_nsec = (long int)delay * 1000 * 1000;
+        if(delay > 999)
+        {   
+            delay_req.tv_sec = (int)(delay / 1000);                            /* Must be Non-Negative */
+            delay_req.tv_nsec = (delay - ((long)delay_req.tv_sec * 1000)) * 1000000; /* Must be in range of 0 to 999999999 */
+        }
+        else
+        {
+            delay_req.tv_sec = 0;
+            delay_req.tv_nsec = (long)delay * 1000 * 1000;
+        }
     }
     else
         exit_with_error(logger, "Cannot read Delay from config file");

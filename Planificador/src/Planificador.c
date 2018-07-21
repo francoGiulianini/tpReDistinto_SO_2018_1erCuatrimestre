@@ -100,11 +100,14 @@ int main(void)
         	finish_esi(un_esi);
             sem_wait(&hay_esis);
 
+            pthread_mutex_lock(&pause_mutex);
             if(stop)        //para que se pueda cerrar el programa correctamente
                 continue;
 
+            sort_list_by_algorithm(lista_ready);
             un_esi = list_remove(lista_ready, 0);
             fin_de_esi = 0;
+            pthread_mutex_unlock(&pause_mutex);
         }
 	}
 
@@ -331,6 +334,7 @@ void HostConnections()
                         a_new_esi->name = (char*)malloc(7);
                         strcpy(a_new_esi->name, name);
                         a_new_esi->instructions_counter = 0;
+                        a_new_esi->waiting_time = (float)0;
                         a_new_esi->cpu_time_estimated = (float)initial_estimation;
                         a_new_esi->cpu_time_previous = (float)initial_estimation;
                     
@@ -684,7 +688,7 @@ void unlock_key(char* key)
             log_info(logger, "Estimation for: %s is: %f",
                 otro_esi->name, otro_esi->cpu_time_estimated);
 
-            otro_esi->waiting_time = 0;
+            otro_esi->waiting_time = (float)0;
             list_add(lista_ready, otro_esi);
             
             break;
@@ -696,8 +700,7 @@ void unlock_key(char* key)
 
 void update_values()
 {
-    if(respuesta_ok)
-        un_esi->instructions_counter += 1;
+    un_esi->instructions_counter += 1;
 
     switch(algorithm)
     {
@@ -741,12 +744,12 @@ void sort_list_by_algorithm(t_list * list)
         switch(algorithm){
             case SJFSD:
             case SJFCD:
-                if(p->cpu_time_estimated < q->cpu_time_estimated)
+                if(p->cpu_time_estimated <= q->cpu_time_estimated)
                   return true;
                 else
                  return false;
             case HRRN:
-                if(response_ratio(p) > response_ratio(q))
+                if(response_ratio(p) >= response_ratio(q))
                   return true;
                 else
                  return false;
@@ -758,7 +761,12 @@ void sort_list_by_algorithm(t_list * list)
 
 float response_ratio(t_esi * p)
 {
-    return (p->waiting_time + p->cpu_time_estimated)/p->cpu_time_estimated;
+    log_info(logger, "W: %f", p->waiting_time);
+    log_info(logger, "S: %f", p->cpu_time_estimated);
+    float new_rr = (p->waiting_time + p->cpu_time_estimated)/p->cpu_time_estimated;
+    log_info(logger, "RR: %f", new_rr);
+
+    return new_rr;
 }
 
 void send_esi_to_ready(t_esi * un_esi)
@@ -799,7 +807,7 @@ void refresh_waiting_time (t_list * list)
 {
     void _increase_time(t_esi* p)
     {
-        p->waiting_time += 1;
+        p->waiting_time += (float)1;
     }
 
     list_iterate(lista_ready, _increase_time);
@@ -911,7 +919,7 @@ void unlock_esi(char * key)
             log_info(logger, "Estimation for: %s is: %f",
                 otro_esi->name, otro_esi->cpu_time_estimated);
 
-            otro_esi->waiting_time = 0;
+            otro_esi->waiting_time = (float)0;
             list_add(lista_ready, otro_esi);
             
             break;
