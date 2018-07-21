@@ -206,12 +206,12 @@ int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja){
 		if (0 != strcmp(tabla[i].clave , "vacio")){
 			tabla[i].age++;
 		}
-		log_info(logger, "consultarTablaLRU *laMasVieja: %d", *laMasVieja);
-		log_info(logger, "consultarTablaLRU tabla[i].age: %d", tabla[i].age);
+		//log_info(logger, "consultarTablaLRU *laMasVieja: %d", *laMasVieja);
+		//log_info(logger, "consultarTablaLRU tabla[i].age: %d", tabla[i].age);
 		if (*laMasVieja < tabla[i].age) {
 			*laMasVieja = tabla[i].age;
 		}
-		log_info(logger, "r: %d", r);
+		//log_info(logger, "r: %d", r);
 		if (r == -1 && string_equals_ignore_case(tabla[i].clave, mensaje->clave)){
 			r = i;
 		}		
@@ -531,12 +531,24 @@ void compactar (entrada_t * tabla){
 				if ((x+clavesVacias) < configuracion->cantEntradas){
 					strcpy(tabla[x].clave, tabla[x+clavesVacias].clave);
 					tabla[x].age = tabla[x+clavesVacias].age;
+					tabla[x].tamanio = tabla[x+clavesVacias].tamanio;
+
+					int ubicacionEnMem = (x + clavesVacias) * configuracion->tamanioEntradas;
+					int nuevaUbicacionEnMem = x * configuracion->tamanioEntradas;		
+					memcpy (mem + nuevaUbicacionEnMem , mem + ubicacionEnMem , tabla[x + clavesVacias].tamanio );
+
 					strcpy(tabla[x+clavesVacias].clave, "vacio");
 					tabla[x+clavesVacias].age = 0;
+					tabla[x+clavesVacias].tamanio = 0;//
+
+					//for (int y=x; y <= (clavesVacias * configuracion->tamanioEntradas); y++){
+						
+					//}
 				}
 				
 			}			
 		}
+		
 		clavesVacias = 0;	
 	}
 
@@ -592,8 +604,7 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 			tabla[i].tamanio = strlen(mensaje->valor);
 			tabla[i].age = 0;
 			comienzoDeEntradasLibres++;
-		}
-						
+		}						
 		guardarEnMem(mensaje, indexCircular);
 		indexCircular = indexCircular + cantPaginas;/*
 		for(int x = 0; x < configuracion->cantEntradas; x++)
@@ -626,9 +637,9 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int cantPaginas,int*
 			//guardar en tabla el tamaño del valor
 			strcpy(tabla[x].clave , mensaje->clave);
 			tabla[x].tamanio = strlen(mensaje->valor);
-			tabla[x].age = 0;			
-			guardarEnMem(mensaje, x);
-		}	
+			tabla[x].age = 0;		
+		}
+		guardarEnMem(mensaje, posicion);
 	} else {
 		switch (flagCompactar){
 			case 0 : {
