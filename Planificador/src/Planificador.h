@@ -40,6 +40,7 @@ typedef struct
     char* name;
     int instructions_counter;
     float cpu_time_estimated;
+    float cpu_time_previous;
     float waiting_time;
 } t_esi;
 

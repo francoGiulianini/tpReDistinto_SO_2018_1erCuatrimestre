@@ -221,6 +221,7 @@ void unlock_key_by_console(char* key)
 	if(a_key == NULL)
 	{
 		printf("Requested Key doesnt exist\n");
+		pthread_mutex_unlock(&cola_bloqueados_mutex);
 		return;
 	}
 
@@ -240,6 +241,7 @@ void unlock_key_by_console(char* key)
 
 	if(queue_is_empty(a_key->cola_esis_bloqueados))
 	{
+		pthread_mutex_unlock(&cola_bloqueados_mutex);
 		return;
 	}
 
@@ -247,7 +249,10 @@ void unlock_key_by_console(char* key)
 	if(string_equals_ignore_case(otro_esi->name, "CONSOLA"))
 	{
 		if(queue_is_empty(a_key->cola_esis_bloqueados))
+		{
+			pthread_mutex_unlock(&cola_bloqueados_mutex);
 			return;
+		}
 
 		otro_esi = queue_pop(a_key->cola_esis_bloqueados);
 	}

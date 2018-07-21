@@ -332,8 +332,9 @@ void HostConnections()
                         strcpy(a_new_esi->name, name);
                         a_new_esi->instructions_counter = 0;
                         a_new_esi->cpu_time_estimated = (float)initial_estimation;
+                        a_new_esi->cpu_time_previous = (float)initial_estimation;
                     
-                        calculate_estimation(a_new_esi);
+                        //calculate_estimation(a_new_esi);
 
                         //se agrega a la lista de ready
                         list_add(lista_ready, a_new_esi);
@@ -722,7 +723,8 @@ void update_values()
 void calculate_estimation(t_esi* esi_a_estimar)
 {
     int i = esi_a_estimar->instructions_counter;
-    int cpu = esi_a_estimar->cpu_time_estimated;
+    int cpu = esi_a_estimar->cpu_time_previous;
+    esi_a_estimar->cpu_time_previous = esi_a_estimar->cpu_time_estimated;
 
     float alpha_a = (((float)alpha / 100) * i);
     float alpha_b = (1 - ((float)alpha / 100)) * cpu;
