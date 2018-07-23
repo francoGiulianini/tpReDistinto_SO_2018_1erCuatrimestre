@@ -21,6 +21,7 @@ int instance_pointer = 0;
 int key_is_not_blocked = 1;
 int num_esi = 0;
 int result = 1;
+bool has_value;
 
 int main(void) 
 {
@@ -29,11 +30,10 @@ int main(void)
     sem_init(&one_esi, 0, 0);
     sem_init(&esi_operation, 0, 0);
     sem_init(&scheduler_response, 0, 0);
-    sem_init(&result_get, 0, 0);
-    sem_init(&result_set, 0, 0);
-	sem_init(&result_store, 0, 0);
+    sem_init(&result_instance, 0, 0);
     header_c = (content_header*) malloc(sizeof(content_header));
     message = (message_content*) malloc(sizeof(message_content));
+
 
     configure_logger();
 
@@ -260,11 +260,9 @@ void host_instance(void* arg)
         switch(operation)
         {
             case GET:
-            {    //preguntar si la instancia sigue viva               
-                header->id = 13;
-                header->len = strlen(message->key);
-                header->len2 = 0;
-                send(socket, header, sizeof(content_header), 0);
+            {    
+				//preguntar si la instancia sigue viva?
+				send_header_with_length(socket, 13, strlen(message->key), 0);
 
                 /*if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
                 {    
@@ -282,7 +280,7 @@ void host_instance(void* arg)
 
                 log_info(logger, "Instance finished GET");
 
-                sem_post(&result_get);
+                sem_post(&result_instance);
                 break;
             }
             case SET:
@@ -290,12 +288,8 @@ void host_instance(void* arg)
                 int length1 = strlen(message->key) + 1;
                 int length2 = strlen(message->value) + 1;
 
-                header->id = 12;
-                header->len = length1;
-                header->len2 = length2;
-
-                log_info(logger, "Sending Value to Instance: %s", name);
-                send(socket, header, sizeof(content_header), 0);
+                log_warning(logger, "Sending Value to: %s", name);
+				        send_header_with_length(socket, 12, length1, length2);
                 
                 //serializar message
                 char * message_send = malloc(length1 + length2);
@@ -316,15 +310,12 @@ void host_instance(void* arg)
 
                 log_info(logger, "Instance finished SET");
 
-                sem_post(&result_set);
+                sem_post(&result_instance);
                 break;
             }
 			case STORE:
 			{
-				header->id = 14;
-				header->len = strlen(message->key);
-				header->len2 = 0;
-				send(socket, header, sizeof(content_header), 0);
+				send_header_with_length(socket, 14, strlen(message->key), 0);
 
 				send(socket, message->key, strlen(message->key) + 1, 0);
 
@@ -332,12 +323,30 @@ void host_instance(void* arg)
 
 				log_info(logger, "Instance finished STORE");
 
-				sem_post(&result_store);
+				sem_post(&result_instance);
 
 				break;
 			}
             case STATUS:
-                break;
+			{
+				send_header_with_length(socket, 15, strlen(message->key), 0);
+
+				send(socket, message->key, strlen(message->key) + 1, 0);
+
+				recv(socket, header, sizeof(content_header), 0);
+				if (header->id == 13)
+				{
+					//recibir valor
+					receive_message(socket, header);
+
+					has_value = true;
+				}
+				else
+					has_value = false;
+
+				sem_post(&result_instance);
+				break;
+			}
             default:
             {
                 log_error(logger, "Oops...");
@@ -397,26 +406,25 @@ void host_scheduler(void* arg)
     while(1)
     {
         content_header* header = malloc(sizeof(content_header));
-        //int key_id;
 
+        log_info(logger, "STATUS?");
         //for STATUS operation
-        recv(socket, header, sizeof(content_header), MSG_DONTWAIT);
-        if(header->id == 39)
+        recv(socket, header, sizeof(content_header), 0);
+        if(header->id == 33)
         {
-            //abrir hilo para status o hacerlo aca
+			operation_status(socket, header);
         }
 
+        log_info(logger, "NO STATUS");
         sem_wait(&esi_operation);
 
-        header->len = strlen(message->key);
+        int key_len = strlen(message->key);
         switch(operation)
         {
             case GET: //preguntar por clave
             {
                 log_info(logger, "Checking key with scheduler");
-                header->id = 31;
-                header->len2 = 0;
-                send(socket, header, sizeof(content_header), 0);
+				send_header_with_length(socket, 31, key_len, 0);
                 
                 send(socket, message->key, header->len, 0);
 
@@ -434,9 +442,7 @@ void host_scheduler(void* arg)
             case STORE: //desbloquear clave
             {
                 log_info(logger, "Unlocking key with scheduler");
-                header->id = 32;
-                header->len2 = 0;
-                send(socket, header, sizeof(content_header), 0);
+				send_header_with_length(socket, 32, key_len, 0);
 
                 send(socket, message->key, header->len, 0);
 
@@ -453,9 +459,7 @@ void host_scheduler(void* arg)
             }
             case SET: //operacion set
             {
-                header->id = 33;
-                header->len2 = 0;
-                send(socket, header, sizeof(content_header), 0);
+				send_header_with_length(socket, 33, key_len, 0);
 
 				send(socket, message->key, header->len, 0);
 
@@ -472,10 +476,7 @@ void host_scheduler(void* arg)
             }
             case ABORT: //abortar esi
             {
-                header->id = 34;
-                header->len = 0;
-                header->len2 = 0;
-                send(socket, header, sizeof(content_header), 0);
+				send_header(socket, 34);
 
                 break;
             }
@@ -626,6 +627,7 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     
     if(!key_is_not_blocked)
     {       
+		//enviar resultado despues de asignar instancia
         send_header(socket, 22);
     }    
     else
@@ -636,6 +638,8 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
         assign_instance(algorithm, instances);          
         pthread_mutex_unlock(&lock);
         
+		sem_wait(&result_instance);
+
         dictionary_put(blocked_keys, message->key, NULL);
     } 
 }
@@ -695,7 +699,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 		return;
 	}
 
-    sem_wait(&result_set);
+    sem_wait(&result_instance);
 
     if(!result)
     {
@@ -758,7 +762,7 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 		return;
 	}  
 
-	sem_wait(&result_store);
+	sem_wait(&result_instance);
 
 	if (!result)
 	{
@@ -798,6 +802,77 @@ void update_instance(instance_t* one_instance, content_header* header)
 	}
 }
 
+void operation_status(int socket, content_header* header)
+{
+	receive_message(socket, header);
+
+	log_info(logger, "Scheduler requested STATUS for Key: %s", message->key);
+	
+	instance_t* one_instance = find_by_key(instances, message->key);
+	if (one_instance == NULL)
+	{
+		log_info(logger, "The Key was not assigned before");
+
+		//simular asignacion de una instancia
+		one_instance = simulate_assignment();
+
+		log_info(logger, "The Key should go here: %s", one_instance->name);
+
+		int name_len = strlen(one_instance->name);
+		send_header_with_length(socket, 36, name_len, 0);
+
+		send(socket, one_instance->name, name_len, 0);
+
+		return;
+	}
+
+	if (!one_instance->is_active)
+	{
+		log_info(logger, "The Key is assigned but instance is inactive");
+
+		//simular asignacion de una instancia?
+		one_instance = simulate_assignment();
+
+		log_info(logger, "The Key should go here: %s", one_instance->name);
+
+		int name_len = strlen(one_instance->name);
+		send_header_with_length(socket, 36, name_len, 0);
+
+		send(socket, one_instance->name, name_len, 0);
+
+		return;
+	}
+
+	//preguntar a instancia cual es el valor
+	operation = STATUS;
+	sem_post(&one_instance->start);
+
+	sem_wait(&result_instance);
+
+	int name_len = strlen(one_instance->name);
+	int value_len = strlen(message->value);
+
+	if (has_value)
+	{
+		send_header_with_length(socket, 37, name_len, value_len);
+
+		//serializar nombre instancia + valor
+		char* message_send = (char*)malloc(name_len + value_len);
+		memcpy(message_send, one_instance->name, name_len);
+		memcpy(message_send + name_len, message->value, value_len);
+
+		send(socket, message_send, name_len + value_len, 0);
+
+		free(message_send);
+	}
+	else
+	{
+		send_header_with_length(socket, 38, name_len, 0);
+
+		send(socket, one_instance->name, name_len, 0);
+	}
+}
+
 void initiate_compactation()
 {
     void _send_to_instance(instance_t * i)
@@ -823,9 +898,47 @@ void send_header(int socket, int id)
     header->len = 0;
     header->len2 = 0;
         
-    send(socket, header, sizeof(content_header), 0);
+    int result = send(socket, header, sizeof(content_header), 0);
+	if (result <= 0)
+	{
+		exit_with_error(logger, "Cannot Send header");
+	}
+  free(header);
+}
 
-    free(header);
+void send_header_with_length(int socket, int id, int len1, int len2)
+{
+	content_header* header = malloc(sizeof(content_header));
+	header->id = id;
+	header->len = len1;
+	header->len2 = len2;
+
+	int result = send(socket, header, sizeof(content_header), 0);
+	if (result <= 0)
+	{
+		exit_with_error(logger, "Cannot Send header");
+	}
+  
+  free(header);
+}
+
+void receive_message(int socket, content_header* header)
+{
+	message = (message_content*)malloc(sizeof(message_content));
+	char* message_recv = malloc(header->len + header->len2);
+
+	int result = recv(socket, message_recv, header->len, 0);
+	if (result <= 0)
+	{
+		log_error(logger, "Cannot receive Key for STATUS");
+		return;
+	}
+
+	//deserealizacion
+	message->key = malloc(header->len + 1);
+	memcpy(message->key, message_recv, header->len);
+	message->key[header->len] = '\0';
+	free(message_recv);
 }
 
 void assign_instance(_Algorithm algorithm, t_list* instances)
@@ -838,39 +951,19 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
         {
             sem_post(&chosen_one->start);
             
-            sem_wait(&result_get);
             if(just_disconnected == 0)
                 return;
         }
     }
 
-    switch(algorithm)
-    {
-        case EL:
-        {
-            chosen_one = choose_by_counter(instances);
+	chosen_one = malloc(sizeof(instance_t));
 
-            break;
-        }
-		case LSU:
-		{
-			chosen_one = choose_by_space(instances);
-
-			break;
-		}
-		case KE:
-		{
-			chosen_one = choose_by_letter(instances);
-
-			break;
-		}
-    }
+	chosen_one = assign_by_algorithm(algorithm, false);
 
 	log_info(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
 	dictionary_put(chosen_one->keys, message->key, NULL);
 
 	sem_post(&chosen_one->start);
-	sem_wait(&result_get);
 }
 
 int save_on_instance(t_list* instances)
@@ -888,6 +981,44 @@ int save_on_instance(t_list* instances)
         log_warning(logger, "Instance has key but is not active");
         return 0;
     }
+}
+
+instance_t* simulate_assignment()
+{
+	instance_t* chosen_one;
+
+	chosen_one = assign_by_algorithm(algorithm, true);
+	
+	return chosen_one;
+}
+
+instance_t* assign_by_algorithm(_Algorithm method, bool is_simulated)
+{
+	instance_t* one_instance;
+
+	switch (algorithm)
+	{
+		case EL:
+		{
+			one_instance = choose_by_counter(instances, is_simulated);
+
+			break;
+		}
+		case LSU:
+		{
+			one_instance = choose_by_space(instances);
+
+			break;
+		}
+		case KE:
+		{
+			one_instance = choose_by_letter(instances);
+
+			break;
+		}
+	}
+
+	return one_instance;
 }
 
 instance_t* add_instance_to_list(char* name, int socket)
@@ -975,8 +1106,9 @@ void disconnect_instance_in_list(int socket)
 		if(algorithm == KE)
 			assign_letters();
 
-        //pthread_mutex_unlock(&instance->start);
+		pthread_mutex_lock(&lock);
         list_add(instances, instance);
+		pthread_mutex_unlock(&lock);
         log_info(logger, "Removed from list of active Instances");
     }
     else
@@ -1003,9 +1135,10 @@ instance_t* socket_is_equal(t_list* lista, int socket)
     return list_remove_by_condition(lista, _is_the_one);
 }
 
-instance_t* choose_by_counter(t_list* lista)
+instance_t* choose_by_counter(t_list* lista, bool is_simulated)
 {
     int i_max = list_size(lista) - 1;
+	int aux_pointer = instance_pointer;
 
     instance_t* an_instance = list_get(lista, instance_pointer++);
 
@@ -1016,6 +1149,9 @@ instance_t* choose_by_counter(t_list* lista)
     {
         instance_pointer = 0;
     }
+
+	if (is_simulated)
+		instance_pointer = aux_pointer;
 
     return an_instance;
 }

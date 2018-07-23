@@ -94,11 +94,16 @@ void Console(/*void *parameter*/)
 			}
 			case STATUS:
 			{
-				pthread_mutex_lock(&pause_mutex);
-				//ver enunciado
+				pthread_mutex_lock(&status_mutex);
 				key = consoleReadArg(line, &consoleInputIndex);
-				log_info(logger, "Status information displayed by command");
+				if(null_argument(key, "<key>"))
+					break;
+				get_key_status(key);
+				
+				log_info(logger, "Status information displayed by command");				
 				free(key);
+				
+				pthread_mutex_unlock(&status_mutex);
 				break;
 			}
 			case DEADLOCK:
@@ -314,6 +319,7 @@ void unlock_key_by_console(char* key)
 		log_info(logger, "In Ready queue after unlocking: %s", p->name);
 	}
 	list_iterate(lista_ready, _log_all_ready_a);
+
 	sem_post(&hay_esis);
 }
 
@@ -341,6 +347,77 @@ void list_blocked_esis(char* resource)
 		t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
 		printf("%s\n", otro_esi->name);
 		queue_push(a_key->cola_esis_bloqueados, otro_esi);
+	}
+}
+
+void get_key_status(char * key)
+{
+	clave_bloqueada_t* a_key = (clave_bloqueada_t*)malloc(sizeof(clave_bloqueada_t));
+	a_key = find_by_key(lista_bloqueados, key);
+	
+	if(a_key == NULL)//la clave nunca se pidio, entonces hay que simular
+	{	
+		printf("Requested Key doesnt exist\n");
+
+		//simular asignacion de instancia
+		send_header(socket_c, 33);
+
+		send(socket_c, key, strlen(key), 0);
+		content_header* header = malloc(sizeof(content_header));
+
+		recv(socket_c, header, sizeof(content_header), 0);
+		if(header->id == 36)//instancia simulada
+		{
+			char * instance_name = malloc(header->len + 1);
+			recv(socket_c, instance_name, header->len, 0);
+			instance_name[header->len] = '\0';
+
+			printf("Key should get assigned to: %s\n", instance_name);
+
+			free(instance_name);
+			free(header);
+		}
+		return;
+	}
+	else//la clave fue pedida, recibir valor o instancia en la que está
+	{
+		send_header(socket_c, 33);
+
+		content_header* header = malloc(sizeof(content_header));
+
+		if(header->id == 37) //tiene valor asignado
+		{
+			char * value = malloc(header->len2 + 1);
+			char * instance_name = malloc(header->len + 1);
+			char * message_recv = malloc(header->len + header->len2 + 1);
+
+			recv(socket_c, message_recv, header->len + header->len2, 0);
+
+			memcpy(instance_name, message_recv, header->len);
+			memcpy(value, message_recv + header->len, header->len2);
+			instance_name[header->len] = '\0';
+			value[header->len2] = '\0';
+
+			printf("Instance: %s Value: %s\n",instance_name, value);
+
+			free(instance_name);
+			free(value);
+			free(message_recv);
+		}
+		if(header->id == 38) //no tiene valor o fue reemplazada
+		{
+			char * instance_name = malloc(header->len + 1);
+			recv(socket_c, instance_name, header->len, 0);
+			instance_name[header->len] = '\0';
+
+			printf("Instance: %s Does not have a value\n", instance_name);
+
+			free(instance_name);
+		}
+
+		free(header);
+
+		return;			
 	}
 }
 

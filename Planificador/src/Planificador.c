@@ -76,6 +76,7 @@ int main(void)
         {
             exit_with_error(logger, "Cannot find ESI");
         }
+        send_header(socket_c, 99); //para poder hacer status
         send_header(un_esi->socket, 21); //ejecutar una instruccion
 
         wait_question(socket_c);

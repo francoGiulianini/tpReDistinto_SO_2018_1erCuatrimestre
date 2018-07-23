@@ -462,6 +462,40 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			send_header(coordinator_socket, 12);
 			break;			
 		}
+    case 15: {
+			//STATUS
+			/*char * clave = (char*)malloc(header->lenClave + 1);
+
+			recv(coordinator_socket, clave, header->lenClave + 1, 0);
+			//deserializar
+			clave[header->lenClave + 1] = '\0';
+
+			//revisar tabla
+			int posicion_tamanio[2] = buscar_en_tabla(tabla, clave);
+
+			if (posicion_tamanio[0] != -1)
+			{
+				//si está buscar valor en memoria
+				char* valor = buscar_en_memoria(posicion_tamanio);
+
+				content_header* header = malloc(content_header*);
+				header->id = 13;
+				header->lenClave = 0;
+				header->lenValor = strlen(valor) + 1;
+
+				send(coordinator_socket, header, sizeof(content_header), 0);
+				//devolver valor a coordinador
+
+				send(coordinator_socket, valor, header->lenValor, 0);
+
+				free(header);
+			}
+			else
+			{
+				//si no esta 
+				send_header(coordinator_socket, 14);
+			}*/
+		}
 	}
 }
 
@@ -680,6 +714,32 @@ void storeKey(entrada_t * tabla, char* clave){
 		memcpy(una_clave->map, mem + ubicacionEnMem, tabla[posicion].tamanio +1 );
 	}									
 }
+  
+/*int* buscar_en_tabla(entrada_t * tabla, char* clave)
+{
+	int pos_tam[2] = [0, 0];
+
+	for (int i = 0; i < configuracion->cantEntradas; i++)
+	{
+		if (string_equals_ignore_case(tabla[i].clave, clave))
+		{
+			pos_tam = [i, tabla[i].tamanio];
+			return pos_tam;
+		}
+	}
+
+	pos_tam = [-1, -1];
+	return pos_tam;
+}
+  
+char* buscar_en_memoria(int* pos_tam)
+{
+	char* valor = (char*)malloc(pos_tam[1]);
+
+	memcpy(valor, mem + (pos_tam[0] * configuracion.tamanioEntrada), pos_tam[1]);
+
+	return valor;
+}*/
 
 void dump(entrada_t * tabla)
 {
