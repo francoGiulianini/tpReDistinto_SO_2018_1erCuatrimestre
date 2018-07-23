@@ -101,8 +101,6 @@ int buscarEspacioLibre (entrada_t*tabla, content* mensaje, int cantPaginas);
 void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas);
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int cantPaginas,int* laMasVieja);
 void storeKey(entrada_t * tabla, char* clave);
-int* buscar_en_tabla(entrada_t * tabla, char* clave);
-char* buscar_en_memoria(int* pos_tam);
 void dump(entrada_t * tabla);
 ptrNodo crearNodo(char* clave);
 void insertarNodo(ptrLista* lista, char* clave);
