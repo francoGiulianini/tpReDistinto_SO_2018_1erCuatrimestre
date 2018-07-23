@@ -27,6 +27,7 @@ void Console(/*void *parameter*/)
 				stop = 1;
 				exit = 1;
 				sem_post(&hay_esis);
+				pthread_mutex_unlock(&pause_mutex);
 				log_warning(logger, "The Scheduler was closed by command");
 				break;
 			}
@@ -55,9 +56,9 @@ void Console(/*void *parameter*/)
 				if(null_argument(id, "<id>"))
 					break;
 
-				block_esi_by_console(key, id);
+				block_key_by_console(key, id);
 
-				log_info(logger, "The Scheduler blocked an ESI with key: %s and id: %s by command", key, id);
+				log_info(logger, "The Scheduler blocked key: %s with id: %s by command", key, id);
 				free(key);
 				free(id);
 				break;
@@ -94,10 +95,16 @@ void Console(/*void *parameter*/)
 			}
 			case STATUS:
 			{
-				pthread_mutex_lock(&pause_mutex);
 				//ver enunciado
 				key = consoleReadArg(line, &consoleInputIndex);
+				if(null_argument(key, "<key>"))
+					break;
 				log_info(logger, "Status information displayed by command");
+
+				pthread_mutex_lock(&status_mutex);
+				get_key_status(key);
+				pthread_mutex_unlock(&status_mutex);
+
 				free(key);
 				break;
 			}
@@ -184,9 +191,9 @@ int null_argument(char* arg_console, char* for_logger)
 	return 0;
 }
 
-void block_esi_by_console(char * key, char * id)
+void block_key_by_console(char * key, char * id)
 {
-	sem_wait(&esi_executing);
+	/*sem_wait(&esi_executing);
 	pthread_mutex_lock(&pause_mutex);
 	//ver si esta ejecutando o en listo
 	t_esi * otro_esi = find_and_remove_by_id(lista_ready, id);
@@ -208,7 +215,7 @@ void block_esi_by_console(char * key, char * id)
 	}
 
 	list_add(lista_bloqueados, un_key);
-	pthread_mutex_unlock(&pause_mutex);
+	pthread_mutex_unlock(&pause_mutex);*/
 }
 
 void unlock_key_by_console(char* key)
@@ -341,6 +348,79 @@ void list_blocked_esis(char* resource)
 		t_esi* otro_esi = queue_pop(a_key->cola_esis_bloqueados);
 		printf("%s\n", otro_esi->name);
 		queue_push(a_key->cola_esis_bloqueados, otro_esi);
+	}
+}
+
+void get_key_status(char* key)
+{
+	clave_bloqueada_t* a_key = (clave_bloqueada_t*)malloc(sizeof(clave_bloqueada_t));
+	a_key = find_by_key(lista_bloqueados, key);
+	
+	if(a_key == NULL)//la clave nunca se pidio, entonces hay que simular
+	{	
+		printf("Requested Key doesnt exist\n");
+
+		//simular asignacion de instancia
+		send_header(socket_c, 33);
+
+		send(socket_c, key, strlen(key), 0);
+		content_header* header = malloc(sizeof(content_header));
+
+		recv(socket_c, header, sizeof(content_header), 0);
+		if(header->id == 36)//instancia simulada
+		{
+			char * instance_name = malloc(header->len + 1);
+			recv(socket_c, instance_name, header->len, 0);
+			instance_name[header->len] = '\0';
+
+			printf("Key should get assigned to: %s\n", instance_name);
+
+			free(instance_name);
+			free(header);
+		}
+		return;
+	}
+	else//la clave fue pedida, recibir valor o instancia en la que está
+	{
+		send_header(socket_c, 33);
+
+		content_header* header = malloc(sizeof(content_header));
+
+		recv(socket, header, sizeof(content_header), 0);
+
+		if(header->id == 37) //tiene valor asignado
+		{
+			char * value = malloc(header->len2 + 1);
+			char * instance_name = malloc(header->len + 1);
+			char * message_recv = malloc(header->len + header->len2 + 1);
+
+			recv(socket_c, message_recv, header->len + header->len2, 0);
+
+			memcpy(instance_name, message_recv, header->len);
+			memcpy(value, message_recv + header->len, header->len2);
+			instance_name[header->len] = '\0';
+			value[header->len2] = '\0';
+
+			printf("Instance: %s Value: %s\n",instance_name, value);
+
+			free(instance_name);
+			free(value);
+			free(message_recv);
+		}
+		if(header->id == 38) //no tiene valor o fue reemplazada
+		{
+			char * instance_name = malloc(header->len + 1);
+			recv(socket_c, instance_name, header->len, 0);
+			instance_name[header->len] = '\0';
+
+			printf("Instance: %s Does not have a value\n", instance_name);
+
+			free(instance_name);
+		}
+
+		free(header);
+
+		return;			
 	}
 }
 

@@ -70,12 +70,14 @@ int main(void)
 	while (stop != 1)
 	{    
         pthread_mutex_lock(&pause_mutex);
+        pthread_mutex_unlock(&pause_mutex);
         pthread_mutex_lock(&status_mutex);
         
         if(un_esi == NULL)
         {
             exit_with_error(logger, "Cannot find ESI");
         }
+        send_header(socket_c, 99);
         send_header(un_esi->socket, 21); //ejecutar una instruccion
 
         wait_question(socket_c);
@@ -93,7 +95,6 @@ int main(void)
         }
 
         pthread_mutex_unlock(&status_mutex);
-        pthread_mutex_unlock(&pause_mutex);
 
         if(fin_de_esi)
         {
@@ -104,6 +105,7 @@ int main(void)
             log_info(logger, "Got new ESI");
 
             pthread_mutex_lock(&pause_mutex);
+            pthread_mutex_unlock(&pause_mutex);
             if(stop)        //para que se pueda cerrar el programa correctamente
                 continue;
 
@@ -120,7 +122,6 @@ int main(void)
             pthread_mutex_unlock(&new_esi);
 
             fin_de_esi = 0;
-            pthread_mutex_unlock(&pause_mutex);
         }
 	}
 
