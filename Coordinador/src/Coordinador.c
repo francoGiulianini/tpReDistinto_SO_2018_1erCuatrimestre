@@ -640,6 +640,10 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
 
             break;
         }
+        case 24: //ESI ERROR
+        {
+            //#TODO: esi lee mal la linea y tiene que abortar
+        }
     }
 }
 
@@ -740,7 +744,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 	else
 	{
 		//esi tiene que abortar
-		abort_esi(socket);
+		abort_esi(socket); //#TODO: diferenciar el momento en que se usa esta funcion
 		return;
 	}
 
@@ -867,7 +871,7 @@ void operation_status(content_header* header, int socket)
 		return;
 	}
 
-	if (!one_instance->is_active)
+	if (!one_instance->is_active || !test_connection(one_instance->socket))
 	{
 		log_info(logger, "The Key is assigned but instance is inactive");
 
@@ -893,6 +897,7 @@ void operation_status(content_header* header, int socket)
 	}
 
 	//preguntar a instancia cual es el valor
+
 	operation = STATUS;
 	sem_post(&one_instance->start);
 
@@ -992,6 +997,20 @@ void send_header(int socket, int id)
     free(header);
 }
 
+bool test_connection(int socket)
+{
+    char buffer[10];
+
+    int result = recv(socket, buffer, sizeof(buffer), MSG_PEEK | MSG_DONTWAIT);
+    if(result == 0)
+    {
+        disconnect_socket(socket, true);
+        return false;
+    }
+    else
+        return true;
+}
+
 instance_t* simulate_assignment()
 {
     instance_t* chosen_one = choose_instance(true);
@@ -1007,15 +1026,26 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
     {    
         if(chosen_one->is_active)
         {
-            sem_post(&chosen_one->start);
+            if(test_connection(chosen_one->socket) == true);//la instancia se desconecto
+            {
+                sem_post(&chosen_one->start);
             
-            sem_wait(&result_instance);
-            if(just_disconnected == 0)
-                return;
+                sem_wait(&result_instance);
+                if(just_disconnected == 0)
+                    return;
+            }
         }
     }
 
-    chosen_one = choose_instance(false);
+    bool still_connected = false;
+
+    while(!still_connected)
+    {
+        chosen_one = choose_instance(false);
+
+        if(test_connection(chosen_one->socket) == true)
+            still_connected = true;
+    }
 
 	log_info(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
 	dictionary_put(chosen_one->keys, message->key, NULL);
@@ -1059,6 +1089,12 @@ int save_on_instance(t_list* instances)
 
     if(chosen_one->is_active)
     {
+        if(!test_connection(chosen_one->socket))
+        {
+            log_warning(logger, "Instance has key but is not active");
+            return 0;
+        }
+
         sem_post(&chosen_one->start);
         log_info(logger, "Saving Key on %s", chosen_one->name);
         return 1;

@@ -114,6 +114,7 @@ void operation_status(content_header* header, int socket);
 void initiate_compactation();
 void abort_esi(int socket);
 void send_header(int socket, int id);
+bool test_connection(int socket);
 instance_t* simulate_assignment();
 void assign_instance(_Algorithm algorithm, t_list* instances);
 instance_t* choose_instance(bool simulate);
