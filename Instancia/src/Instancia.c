@@ -515,6 +515,7 @@ void compactar (entrada_t * tabla){
 
 	//Compactar tabla
 	log_info(logger, "Compactando");
+	printf("Compacting [insert elevator music here]");
 	int clavesVacias = 0;
 	int j = 0;
 	for (int i = 0; i < configuracion->cantEntradas; i++){
@@ -542,7 +543,7 @@ void compactar (entrada_t * tabla){
 					tabla[x+clavesVacias].tamanio = 0;//
 
 					//for (int y=x; y <= (clavesVacias * configuracion->tamanioEntradas); y++){
-						
+					printf(".");	
 					//}
 				}
 				
@@ -553,8 +554,6 @@ void compactar (entrada_t * tabla){
 	}
 
 	// Una vez que se compacto, se actualiza el comienzoDeEntradasLibres
-
-	// HACER: actualizar el storage
 	int e = 0;
 	while (0 != strcmp(tabla[e].clave, "vacio") && e < configuracion->cantEntradas){
 		e++;
@@ -564,9 +563,12 @@ void compactar (entrada_t * tabla){
 
 	log_info(logger,"Luego de la compactacion la tabla queda así:");
 	for(int i = 0; i < configuracion->cantEntradas; i++)
-		{
-			log_info(logger, "%s age: %d", tabla[i].clave, tabla[i].age);
-		}
+	{
+		log_info(logger, "%s age: %d", tabla[i].clave, tabla[i].age);
+	}
+
+	printf("Done\n");
+	send_header(coordinator_socket, 12);//le aviso al coordinador que termino la compactacion
 }
 
 int getCantPaginas (int tamanioMensaje){
@@ -613,6 +615,7 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio			
 		switch (flagCompactar){
 			case 0 : {
+				send_header(coordinator_socket, 11);//le aviso al coordinador que tengo que compactar
 				compactar(tabla);
 				flagCompactar = 1;
 				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);

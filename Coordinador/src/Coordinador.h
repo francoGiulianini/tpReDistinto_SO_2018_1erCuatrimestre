@@ -33,7 +33,7 @@
 #define STATUS 39*/
 #define MAX_KEY_LENGTH 40
 
-typedef enum _Operations {GET, SET, STORE, STATUS, ABORT} _Operation;
+typedef enum _Operations {GET, SET, STORE, STATUS, ABORT, COMPACT} _Operation;
 typedef enum _Clients {INSTANCE, ESI, SCHEDULER} _Client;
 typedef enum _Algorithms {EL, LSU, KE} _Algorithm;
 
@@ -96,6 +96,7 @@ sem_t one_esi;
 sem_t esi_operation;
 sem_t scheduler_response;
 sem_t result_instance;
+sem_t compact;
 
 void configure_logger();
 void get_config_values(t_config* config);
@@ -111,7 +112,7 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
 void operation_set(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
 void operation_store(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
 void operation_status(content_header* header, int socket);
-void initiate_compactation();
+void initiate_compactation(int socket);
 void abort_esi(int socket);
 void send_header(int socket, int id);
 bool test_connection(int socket);

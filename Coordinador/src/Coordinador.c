@@ -21,7 +21,6 @@ int instance_pointer = 0;
 int key_is_not_blocked = 1;
 int num_esi = 0;
 int result = 1;
-int compact = 0;
 bool has_value = false;
 
 int main(void) 
@@ -260,20 +259,11 @@ void host_instance(void* arg)
         switch(operation)
         {
             case GET:
-            {    //preguntar si la instancia sigue viva               
+            {              
                 header->id = 13;
                 header->len = strlen(message->key);
                 header->len2 = 0;
                 send(socket, header, sizeof(content_header), 0);
-
-                /*if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
-                {    
-                    disconnect_socket(socket, true);
-
-                    just_disconnected = 1;
-                }
-                else
-                    just_disconnected = 0;*/
 
                 send(socket, message->key, strlen(message->key) + 1, 0);
 
@@ -308,16 +298,6 @@ void host_instance(void* arg)
                     disconnect_socket(socket, true);
 
                 process_message_header(header, socket);
-
-                if(compact)
-                {
-                    if ((valread = recv(socket , header, sizeof(content_header), 0)) == 0)
-                        disconnect_socket(socket, true);
-
-                    process_message_header(header, socket);
-
-                    compact = false;
-                }
 
 				//actualizar datos de la instancia
 				update_instance(instance, header);
@@ -367,8 +347,8 @@ void host_instance(void* arg)
 					char* message_recv = malloc(header->len + header->len2);
                     message->key = realloc(message->key, header->len + 1);
 
-                    int result = recv(socket, message_recv, header->len, 0);
-                    if(result <= 0)
+                    valread = recv(socket, message_recv, header->len, 0);
+                    if(valread <= 0)
                         perror("Recv:");
 
                     //deserealizacion   
@@ -383,6 +363,17 @@ void host_instance(void* arg)
 					has_value = false;
 
 				sem_post(&result_instance);
+                break;
+            }
+            case COMPACT:
+            {
+                send_header(socket, 11);
+
+                valread = recv(socket, header, sizeof(content_header), 0);
+                if(valread == 0)
+                    disconnect_socket(socket, true);
+
+                sem_post(&compact);
                 break;
             }
             default:
@@ -561,8 +552,13 @@ void process_message_header(content_header* header, int socket)
         }
         case 11:    //compactar
         {
-            compact = true;
-            initiate_compactation();
+            initiate_compactation(socket);
+
+            int valread = recv(socket , header, sizeof(content_header), 0);
+            if((valread) == 0)
+                disconnect_socket(socket, true);
+
+            process_message_header(header, socket);
 
             break;
         }
@@ -967,14 +963,42 @@ void update_instance(instance_t* one_instance, content_header* header)
 	}
 }
 
-void initiate_compactation()
+void initiate_compactation(int socket)
 {
-    void _send_to_instance(instance_t * i)
+    t_list* instances_to_compact = list_create();
+
+    bool _active_instances(instance_t * i)
     {
-        send_header(i->socket, 11);
+        if(socket ==  i->socket)
+            return false;//no lo envia la peticion al que pidio compactar
+
+        if(i->is_active)
+        {
+            if(test_connection(i->socket))
+            {
+                //send_header(i->socket, 11);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }       
     }
 
-    list_iterate(instances, _send_to_instance);
+    instances_to_compact = list_filter(instances, _active_instances);
+
+    sem_init(&compact, 0, -list_size(instances_to_compact));
+
+    void _compact_instance(instance_t * i)
+    {
+        operation = COMPACT;
+        sem_post(&i->start);
+    }
+
+    list_iterate(instances_to_compact, _compact_instance);
+
+    sem_wait(&compact);
 }
 
 void abort_esi(int socket)
@@ -1028,6 +1052,7 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
         {
             if(test_connection(chosen_one->socket) == true);//la instancia se desconecto
             {
+                log_info("%s has the key", chosen_one->name);
                 sem_post(&chosen_one->start);
             
                 sem_wait(&result_instance);
@@ -1145,7 +1170,7 @@ void assign_letters()
 		return p->is_active;
 	}
 
-	int cant_letters = 25;
+	int cant_letters = 26;
 
 	int cant_instances = list_count_satisfying(instances, _is_active);
 
@@ -1162,9 +1187,9 @@ void assign_letters()
 			if (letters_to_instances <= cant_letters)
 			{
 				p->letter_min = 65 + assigned_letters;
-				p->letter_max = 65 + assigned_letters + letters_to_instances;
+				p->letter_max = 65 + assigned_letters + letters_to_instances - 1;
 				log_info(logger, "%s has keys starting from: %c, to: %c", p->name, p->letter_min, p->letter_max);
-				assigned_letters = assigned_letters + letters_to_instances + 1;
+				assigned_letters = assigned_letters + letters_to_instances;
 				cant_letters -= letters_to_instances;
 			}
 			else
