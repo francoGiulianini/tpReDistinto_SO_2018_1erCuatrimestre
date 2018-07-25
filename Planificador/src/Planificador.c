@@ -383,6 +383,15 @@ void HostConnections()
                         log_info(logger, "ESI completed all instructions");
                         fin_de_esi = 1;
                         respuesta_ok = 1;
+                        abort_esi = 0;
+                        sem_post(&esi_respuesta);
+                    }
+
+                    if(header->id == 25)
+                    {
+                        log_info(logger, "ESI was aborted");
+                        fin_de_esi = 1;
+                        respuesta_ok = 1;
                         abort_esi = 1;
                         sem_post(&esi_respuesta);
                     }

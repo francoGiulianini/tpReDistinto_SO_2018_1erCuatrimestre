@@ -268,18 +268,18 @@ void send_parsed_operation(t_esi_operacion parsed)
 				send_message(scheduler_socket, 23, "", "");
 				break;
 			case 24:
-				send_message(scheduler_socket, 24, "", "");
+				send_message(scheduler_socket, 25, "", "");
 				exit_with_error(logger, "ESI aborted on coordinator's order");
 				break;
 			default:
-				send_message(scheduler_socket, 24, "", "");
+				send_message(scheduler_socket, 25, "", "");
 				log_error(logger, "Message id not valid: %d", buffer->id);
 				exit_with_error(logger, "");
 		}
 	}
 	else
 	{
-		send_message(scheduler_socket, 24, "", "");
+		send_message(scheduler_socket, 25, "", "");
 		exit_with_error(logger, "line from script is not valid");
 	}
 
