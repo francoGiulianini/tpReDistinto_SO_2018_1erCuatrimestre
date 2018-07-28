@@ -90,7 +90,6 @@ t_list * instances;
 content_header * header_c;
 message_content* message;
 config_instance_t* config_instance;
-pthread_mutex_t lock;
 sem_t one_instance;
 sem_t one_esi;
 sem_t esi_operation;

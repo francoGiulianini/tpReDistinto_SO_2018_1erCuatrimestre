@@ -25,7 +25,6 @@ bool has_value = false;
 
 int main(void) 
 {
-	pthread_mutex_init(&lock, NULL);
     sem_init(&one_instance, 0, 0);
     sem_init(&one_esi, 0, 0);
     sem_init(&esi_operation, 0, 0);
@@ -249,6 +248,9 @@ void host_instance(void* arg)
     send(socket, config_aux, sizeof(config_instance_t), 0);
 
     sem_post(&one_instance);
+
+    if(instance == NULL)//la instancia se recupero de una caida
+        pthread_exit(NULL);
 
     content_header* header = malloc(sizeof(content_header));
 
@@ -525,20 +527,20 @@ void host_scheduler(void* arg)
 
 void disconnect_socket(int socket, bool is_instance)
 {
-    //disconnected , get his details and print   
-    if(is_instance)
-    {
-        pthread_mutex_lock(&lock);
-        disconnect_instance_in_list(socket);
-        pthread_mutex_unlock(&lock);
-    }
-    
+    //disconnected , get his details and print       
     getpeername(socket , (struct sockaddr*)&serverAddress , (socklen_t*)&addrlen);  
     log_info(logger, "Host disconnected , ip %s , port %d", 
         inet_ntoa(serverAddress.sin_addr) , ntohs(serverAddress.sin_port));  
 
     close(socket);
-    pthread_exit(NULL);
+    if(is_instance)
+    {
+        disconnect_instance_in_list(socket);
+    }
+    else
+    {
+        pthread_exit(NULL);
+    }
 }
 
 void process_message_header(content_header* header, int socket)
@@ -679,13 +681,12 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
     }    
     else
     {    
-        send_header(socket, 23);
-
-        pthread_mutex_lock(&lock);
-        assign_instance(algorithm, instances);          
-        pthread_mutex_unlock(&lock);
+        assign_instance(algorithm, instances);
         
+        sem_wait(&result_instance);
+
         dictionary_put(blocked_keys, message->key, NULL);
+        send_header(socket, 23);
     } 
 }
 
@@ -733,9 +734,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 
 	if (key_is_not_blocked)
 	{
-		pthread_mutex_lock(&lock);
 		result = save_on_instance(instances);
-		pthread_mutex_unlock(&lock);
 	}
 	else
 	{
@@ -796,9 +795,7 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 	//buscar instancia con la clave y avisarle para que guarde en disco
 	if (key_is_not_blocked)
 	{
-		pthread_mutex_lock(&lock);
 		result = save_on_instance(instances);
-		pthread_mutex_unlock(&lock);
 	}
 	else
 	{
@@ -1028,6 +1025,7 @@ bool test_connection(int socket)
     int result = recv(socket, buffer, sizeof(buffer), MSG_PEEK | MSG_DONTWAIT);
     if(result == 0)
     {
+        log_warning(logger, "Disconnection");
         disconnect_socket(socket, true);
         return false;
     }
@@ -1052,12 +1050,9 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
         {
             if(test_connection(chosen_one->socket) == true);//la instancia se desconecto
             {
-                log_info("%s has the key", chosen_one->name);
+                log_info(logger, "%s has the key", chosen_one->name);
                 sem_post(&chosen_one->start);
-            
-                sem_wait(&result_instance);
-                if(just_disconnected == 0)
-                    return;
+                return;
             }
         }
     }
@@ -1067,6 +1062,7 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
     while(!still_connected)
     {
         chosen_one = choose_instance(false);
+        log_info(logger, "Choosing instance");
 
         if(test_connection(chosen_one->socket) == true)
             still_connected = true;
@@ -1076,7 +1072,6 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
 	dictionary_put(chosen_one->keys, message->key, NULL);
 
 	sem_post(&chosen_one->start);
-	sem_wait(&result_instance);
 }
 
 instance_t* choose_instance(bool simulate)
@@ -1133,12 +1128,14 @@ int save_on_instance(t_list* instances)
 
 instance_t* add_instance_to_list(char* name, int socket)
 {
+    bool instance_down = false;
     log_info(logger, "Received Instance name: %s", name);
     //agregar a diccionario de instancias
     instance_t* inst_aux = name_is_equal(instances, name);
     if(inst_aux != NULL)
     { //si ya esta en la lista
         log_info(logger, "Updated state of: %s", name);
+        instance_down = true;
     }
     else
     { //si no esta en la lista
@@ -1153,14 +1150,24 @@ instance_t* add_instance_to_list(char* name, int socket)
 
     inst_aux->socket = socket;
     inst_aux->is_active = 1;
-    sem_init(&inst_aux->start, 0, 0);
 
-    list_add(instances, inst_aux);
+    if(instance_down)
+    {
+        if (algorithm == KE)
+		    assign_letters();
 
-	if (algorithm == KE)
-		assign_letters();
+        return NULL;
+    }
+    else
+    {
+        sem_init(&inst_aux->start, 0, 0);
 
-    return inst_aux;
+        list_add(instances, inst_aux);
+        if (algorithm == KE)
+		    assign_letters();
+
+        return inst_aux;
+    }
 }
 
 void assign_letters()
@@ -1181,8 +1188,8 @@ void assign_letters()
 	int assigned_letters = 0;
 
 	void _assign_letters(instance_t* p)
-	{
-		if (p->is_active)
+	{   
+        if (p->is_active)
 		{
 			if (letters_to_instances <= cant_letters)
 			{
@@ -1232,7 +1239,7 @@ instance_t* name_is_equal(t_list* lista, char* name)
     {
         return string_equals_ignore_case(p->name, name);
     }
-    return list_remove_by_condition(lista, _is_the_one);
+    return list_find(lista, _is_the_one);
 }
 
 instance_t* socket_is_equal(t_list* lista, int socket)
@@ -1241,7 +1248,7 @@ instance_t* socket_is_equal(t_list* lista, int socket)
     {
         return p->socket == socket;
     }
-    return list_remove_by_condition(lista, _is_the_one);
+    return list_find(lista, _is_the_one);
 }
 
 instance_t* choose_by_counter(t_list* lista, bool simulate)
@@ -1370,3 +1377,10 @@ _Algorithm to_algorithm(char* string)
     log_warning(logger, "Incorrect algorithm type, using default EL");
     return EL;
 }
+
+/*
+#TODO:  -abortar esi correctamente
+        -agregar soporte para claves reemplazadas
+        -hacer status parte instancia
+        -comando block, kill, deadlock
+*/
