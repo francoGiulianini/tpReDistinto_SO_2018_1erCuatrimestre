@@ -206,6 +206,9 @@ int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja){
 		if (0 != strcmp(tabla[i].clave , "vacio")){
 			tabla[i].age++;
 		}
+		if (tabla[i].tamanio >configuracion->tamanioEntradas){
+			tabla[i].age = -1;
+		}
 		//log_info(logger, "consultarTablaLRU *laMasVieja: %d", *laMasVieja);
 		//log_info(logger, "consultarTablaLRU tabla[i].age: %d", tabla[i].age);
 		if (*laMasVieja < tabla[i].age) {
@@ -223,17 +226,15 @@ int buscarEspacioLibre (entrada_t*tabla, content* mensaje, int cantPaginas){
 	int posicion = -1;
 	int lugaresVacios = 0;
 	for (int i = 0 ; i < configuracion->cantEntradas; i++){
-		log_info(logger, "i: %d", i);
+		/*log_info(logger, "i: %d", i);
 		log_info(logger, "posicion: %d", posicion);
-		log_info(logger, "lugaresVacios: %d", lugaresVacios);
+		log_info(logger, "lugaresVacios: %d", lugaresVacios);*/
 		if (string_equals_ignore_case(tabla[i].clave, "vacio")){
 			if (posicion == -1){
 				posicion = i;
 			}
 			lugaresVacios++;
 			if (lugaresVacios >= cantPaginas){
-				log_info(logger, "en el if lugaresVacios: %d", lugaresVacios);
-				log_info(logger, "en el if cantPaginas: %d", cantPaginas);
 				return posicion;
 			}
 		}else{
@@ -398,8 +399,8 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				log_info(logger, "cantPaginas: %d", cantPaginas);
 				// recorro la tabla de punta a punta envejeciendo todo y actualizo el valor de laMasVieja
 				int posicion = consultarTablaLRU (tabla, mensaje, &laMasVieja);
-				log_info(logger, "laMasVieja: %d", laMasVieja);
-				log_info(logger, "posicion luego de consultarTablaLRU: %d",posicion);
+				log_info(logger, "la Clave mas vieja atomica: %d", laMasVieja);
+				//log_info(logger, "posicion luego de consultarTablaLRU: %d",posicion);
 				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
 					log_info(logger, "La clave ya existe");
 					int e = posicion + cantPaginas;
@@ -427,9 +428,14 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			free(mensaje);
 
 			log_info(logger,"Luego del SET la tabla queda así:");
+			// lo que está comentado y marcado con ++ permite ver (de manera desprolija) los valores ademas de las entradas
+			// ++ char * elValor;
+			
 			for(int i = 0; i < configuracion->cantEntradas; i++)
 			{
-					log_info(logger, "%s age: %d", tabla[i].clave, tabla[i].age);
+				// ++ elValor = mem + i * configuracion->tamanioEntradas;
+				// ++ log_info(logger, "%s %s", tabla[i].clave, elValor);
+				log_info(logger, "%s ", tabla[i].clave);
 			}
 
 			break;
@@ -564,7 +570,7 @@ void compactar (entrada_t * tabla){
 	log_info(logger,"Luego de la compactacion la tabla queda así:");
 	for(int i = 0; i < configuracion->cantEntradas; i++)
 	{
-		log_info(logger, "%s age: %d", tabla[i].clave, tabla[i].age);
+		log_info(logger, "%s ", tabla[i].clave);
 	}
 
 	printf("Done\n");
@@ -608,9 +614,7 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 			comienzoDeEntradasLibres++;
 		}						
 		guardarEnMem(mensaje, indexCircular);
-		indexCircular = indexCircular + cantPaginas;/*
-		for(int x = 0; x < configuracion->cantEntradas; x++)
-			log_info(logger, "%s", tabla[x].clave);*/
+		indexCircular = indexCircular + cantPaginas;
 	} else {
 	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio			
 		switch (flagCompactar){
