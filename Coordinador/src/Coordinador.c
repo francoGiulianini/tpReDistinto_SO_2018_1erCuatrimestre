@@ -415,11 +415,21 @@ void host_esi(void* arg)
     while(1)
     {
         if ((valread = recv(socket ,header, sizeof(content_header), 0)) == 0)
+        {
             disconnect_socket(socket, false);
+            break;
+        }
         
         process_message_header_esi(header, socket, blocked_keys_by_this_esi, name);
     }
 
+    void _delete_keys(char * key)
+    {
+        free(key);
+    }
+
+    dictionary_destroy_and_destroy_elements(blocked_keys_by_this_esi, _delete_keys);
+    free(name);
     free(header);
 }
 
@@ -537,10 +547,6 @@ void disconnect_socket(int socket, bool is_instance)
     {
         disconnect_instance_in_list(socket);
     }
-    else
-    {
-        pthread_exit(NULL);
-    }
 }
 
 void process_message_header(content_header* header, int socket)
@@ -638,22 +644,17 @@ void process_message_header_esi(content_header* header, int socket, t_dictionary
 
             break;
         }
-        case 24: //ESI ERROR
+        case 25: //ESI ERROR
         {
-            //#TODO: esi lee mal la linea y tiene que abortar
+            abort_esi(socket, 1);
+
+            break;
         }
     }
 }
 
 void operation_get(content_header* header, int socket, t_dictionary * blocked_keys, char* name)
 {
-    if(header->len > MAX_KEY_LENGTH)
-    {
-        log_error(logger, "Key exceeds 40 characters, aborting ESI");
-        abort_esi(socket);
-        return;
-    }
-
     char* message_recv = (char*)malloc(header->len + header->len2);
     //message = (message_content*) malloc(sizeof(message_content));
     message->key = realloc(message->key, header->len + 1);
@@ -721,7 +722,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     if(!dictionary_has_key(blocked_keys, message->key))
     {
         log_info(logger, "But Key was not requested before. Aborting ESI");
-        abort_esi(socket);
+        abort_esi(socket, 1);
         return;
     }
 
@@ -739,7 +740,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 	else
 	{
 		//esi tiene que abortar
-		abort_esi(socket); //#TODO: diferenciar el momento en que se usa esta funcion
+		abort_esi(socket, 2);
 		return;
 	}
 
@@ -748,7 +749,7 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     if(!result)
     {
         log_info(logger, "But Instance was not available. Aborting ESI");
-        abort_esi(socket);
+        abort_esi(socket, 2);
     }
     else
     {
@@ -781,7 +782,7 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
     if(!dictionary_has_key(blocked_keys, message->key))
     {
         log_info(logger, "But Key was not requested before. Aborting ESI");
-        abort_esi(socket);
+        abort_esi(socket, 1);
         return;
     }
 
@@ -800,7 +801,7 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 	else
 	{
 		//esi tiene que abortar
-		abort_esi(socket);
+		abort_esi(socket, 2);
 		return;
 	}  
 
@@ -808,8 +809,8 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 
 	if (!result)
 	{
-		log_info(logger, "But Instance was not available. Aborting ESI");
-		abort_esi(socket);
+		log_info(logger, "But Instance was not available or key was replaced. Aborting ESI");
+		abort_esi(socket, 2);
 		return;
 	}
 	else
@@ -998,12 +999,24 @@ void initiate_compactation(int socket)
     sem_wait(&compact);
 }
 
-void abort_esi(int socket)
+void abort_esi(int socket, int stage)
 {
-    operation = ABORT;
-    sem_post(&esi_operation);
-    send_header(socket, 24);
-    disconnect_socket(socket, false);
+    switch(stage)
+    {
+        case 1://pre-consulta planificador
+        {
+            operation = ABORT;
+            sem_post(&esi_operation);
+            send_header(socket, 24);
+            break;
+            //disconnect_socket(socket, false);
+        }
+        case 2://post-consulta planificador
+        {
+            send_header(socket, 24);
+            break;
+        }
+    }   
 }
 
 void send_header(int socket, int id)
@@ -1379,7 +1392,7 @@ _Algorithm to_algorithm(char* string)
 }
 
 /*
-#TODO:  -abortar esi correctamente
+#TODO:
         -agregar soporte para claves reemplazadas
         -hacer status parte instancia
         -comando block, kill, deadlock

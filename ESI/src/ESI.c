@@ -279,6 +279,11 @@ void send_parsed_operation(t_esi_operacion parsed)
 	}
 	else
 	{
+		//avisar primero al coordinador
+		send_message(coordinator_socket, 25, "", "");
+
+		recv(coordinator_socket, buffer, sizeof(content_header), 0);
+
 		send_message(scheduler_socket, 25, "", "");
 		exit_with_error(logger, "line from script is not valid");
 	}

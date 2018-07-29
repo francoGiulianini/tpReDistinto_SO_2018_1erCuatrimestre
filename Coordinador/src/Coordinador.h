@@ -112,7 +112,7 @@ void operation_set(content_header* header, int socket, t_dictionary * blocked_ke
 void operation_store(content_header* header, int socket, t_dictionary * blocked_keys, char* name);
 void operation_status(content_header* header, int socket);
 void initiate_compactation(int socket);
-void abort_esi(int socket);
+void abort_esi(int socket, int stage);
 void send_header(int socket, int id);
 bool test_connection(int socket);
 instance_t* simulate_assignment();
