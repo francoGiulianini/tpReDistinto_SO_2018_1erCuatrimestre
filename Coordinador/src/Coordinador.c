@@ -985,6 +985,10 @@ void initiate_compactation(int socket)
     }
 
     instances_to_compact = list_filter(instances, _active_instances);
+    if(list_is_empty(instances_to_compact))
+    {
+        return;
+    }
 
     sem_init(&compact, 0, -list_size(instances_to_compact));
 
