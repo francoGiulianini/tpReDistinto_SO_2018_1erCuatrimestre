@@ -423,9 +423,9 @@ void host_esi(void* arg)
         process_message_header_esi(header, socket, blocked_keys_by_this_esi, name);
     }
 
-    void _delete_keys(char * key)
+    void _delete_keys(void* key)
     {
-        free(key);
+        free((char*)key);
     }
 
     dictionary_destroy_and_destroy_elements(blocked_keys_by_this_esi, _delete_keys);
@@ -965,8 +965,9 @@ void initiate_compactation(int socket)
 {
     t_list* instances_to_compact = list_create();
 
-    bool _active_instances(instance_t * i)
+    bool _active_instances(void * p)
     {
+        instance_t* i = (instance_t*)p;
         if(socket ==  i->socket)
             return false;//no lo envia la peticion al que pidio compactar
 
@@ -992,13 +993,16 @@ void initiate_compactation(int socket)
 
     sem_init(&compact, 0, -list_size(instances_to_compact));
 
-    void _compact_instance(instance_t * i)
+    void _compact_instance(void * i)
     {
+        instance_t* q = (instance_t*)i;
         operation = COMPACT;
-        sem_post(&i->start);
+        sem_post(&q->start);
     }
 
     list_iterate(instances_to_compact, _compact_instance);
+
+    list_destroy(instances_to_compact);
 
     sem_wait(&compact);
 }
@@ -1189,9 +1193,10 @@ instance_t* add_instance_to_list(char* name, int socket)
 
 void assign_letters()
 {
-	bool _is_active(instance_t* p)
+	bool _is_active(void* p)
 	{
-		return p->is_active;
+        instance_t* q = (instance_t*)p;
+		return q->is_active;
 	}
 
 	int cant_letters = 26;
@@ -1204,8 +1209,9 @@ void assign_letters()
         letters_to_instances++;
 	int assigned_letters = 0;
 
-	void _assign_letters(instance_t* p)
+	void _assign_letters(void* q)
 	{   
+        instance_t* p = (instance_t*)q;
         if (p->is_active)
 		{
 			if (letters_to_instances <= cant_letters)
@@ -1252,18 +1258,20 @@ void disconnect_instance_in_list(int socket)
 
 instance_t* name_is_equal(t_list* lista, char* name)
 {
-    bool _is_the_one(instance_t* p) 
+    bool _is_the_one(void* p) 
     {
-        return string_equals_ignore_case(p->name, name);
+        instance_t* q = (instance_t*)p;
+        return string_equals_ignore_case(q->name, name);
     }
     return list_find(lista, _is_the_one);
 }
 
 instance_t* socket_is_equal(t_list* lista, int socket)
 {
-    bool _is_the_one(instance_t* p) 
+    bool _is_the_one(void* p) 
     {
-        return p->socket == socket;
+        instance_t* q = (instance_t*)p;
+        return q->socket == socket;
     }
     return list_find(lista, _is_the_one);
 }
@@ -1324,9 +1332,10 @@ instance_t* choose_by_letter(t_list* lista)
 
 instance_t* find_by_key(t_list* lista, char* key)
 {
-    bool _is_the_one(instance_t* p) 
+    bool _is_the_one(void* p) 
     {
-        dictionary_has_key(p->keys, key);
+        instance_t* q = (instance_t*)p;
+        dictionary_has_key(q->keys, key);
     }
 
     return list_find(instances, _is_the_one);
@@ -1338,23 +1347,27 @@ t_list* find_by_free_space(t_list* lista)
     t_list* list_aux2 = list_create();
     int free_space = 0;
 
-	bool _is_active(instance_t* p)
+	bool _is_active(void* p)
 	{
-		if (p->is_active == 1)
+		instance_t* q = (instance_t*)p;
+        if (q->is_active == 1)
 			return true;
 		else
 			return false;
 	}
-	bool _lower_than_the_next(instance_t* p, instance_t* q)
+	bool _lower_than_the_next(void* p, void* q)
 	{
-		if (p->free_space >= q->free_space)
+        instance_t* a = (instance_t*)p;
+        instance_t* b = (instance_t*)q;
+		if (a->free_space >= b->free_space)
 			return true;
 		else
 			return false;
 	}
-    bool _has_the_same_space(instance_t* p)
+    bool _has_the_same_space(void* p)
     {
-        return p->free_space == free_space;
+        instance_t* q = (instance_t*)p;
+        return q->free_space == free_space;
     }
 
 	list_aux = list_filter(lista, _is_active);
@@ -1371,9 +1384,10 @@ t_list* find_by_free_space(t_list* lista)
 
 instance_t* find_by_letter(t_list* lista, char letter)
 {
-	bool _has_letter(instance_t* p)
+	bool _has_letter(void* p)
 	{
-		if (p->letter_min <= letter && p->letter_max >= letter)
+		instance_t* q = (instance_t*)p;
+        if (q->letter_min <= letter && q->letter_max >= letter)
 		{
 			return true;
 		}
