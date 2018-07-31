@@ -102,9 +102,10 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas);
 void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int cantPaginas,int* laMasVieja);
 void storeKey(entrada_t * tabla, char* clave);
 void dump(entrada_t * tabla);
-ptrNodo crearNodo(char* clave);
+char* get_value(entrada_t * tabla, char * clave);
+/*ptrNodo crearNodo(char* clave);
 void insertarNodo(ptrLista* lista, char* clave);
-int estaEnLaLista(ptrNodo listaGETs, char* clave);
+int estaEnLaLista(ptrNodo listaGETs, char* clave);*/
 int mkdir_p(const char *path);
 
 #endif

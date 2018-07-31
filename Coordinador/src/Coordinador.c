@@ -338,7 +338,7 @@ void host_instance(void* arg)
 
                 send(socket, header_status, sizeof(content_header), 0);
 
-                free(header);
+                free(header_status);
 
 				send(socket, message->key, strlen(message->key) + 1, 0);
 
@@ -349,9 +349,7 @@ void host_instance(void* arg)
 					char* message_recv = malloc(header->len + header->len2);
                     message->key = realloc(message->key, header->len + 1);
 
-                    valread = recv(socket, message_recv, header->len, 0);
-                    if(valread <= 0)
-                        perror("Recv:");
+                    recv(socket, message_recv, header->len, 0);
 
                     //deserealizacion   
                     memcpy(message->key, message_recv, header->len);

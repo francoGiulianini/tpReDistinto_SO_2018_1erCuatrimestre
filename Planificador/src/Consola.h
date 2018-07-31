@@ -28,7 +28,7 @@ void unlock_key_by_console(char* key);
 void list_blocked_esis(char* resource);
 void get_key_status(char * key);
 t_esi * find_by_id(t_list * list, char* id);
-t_esi * find_and_remove_by_id(t_list * list, char* id);
+/*t_esi * find_and_remove_by_id(t_list * list, char* id);*/
 clave_bloqueada_t * find_by_key(t_list * lista, char* key);
 
 #endif /* CONSOLA_H_ */

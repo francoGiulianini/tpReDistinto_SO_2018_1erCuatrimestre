@@ -112,8 +112,9 @@ int main(void)
             sort_list_by_algorithm(lista_ready);
 
             pthread_mutex_lock(&new_esi);
-            void _log_all_ready_a(t_esi* p)
+            void _log_all_ready_a(void* q)
 	        {
+                t_esi* p = (t_esi*) q;
 		        log_info(logger, "In Ready queue: %s", p->name);
 	        }
 	        list_iterate(lista_ready, _log_all_ready_a);
@@ -765,8 +766,10 @@ void calculate_estimation(t_esi* esi_a_estimar)
 
 void sort_list_by_algorithm(t_list * list)
 {
-    bool _best_by_algorithm(t_esi* p, t_esi* q) 
+    bool _best_by_algorithm(void* a, void* b) 
     {
+        t_esi* p = (t_esi*) a;
+        t_esi* q = (t_esi*) b;
         switch(algorithm){
             case SJFSD:
             case SJFCD:
@@ -831,8 +834,9 @@ _Algorithm to_algorithm(char* string)
 
 void refresh_waiting_time (t_list * list)
 {
-    void _increase_time(t_esi* p)
+    void _increase_time(void* q)
     {
+        t_esi* p = (t_esi*) q;
         p->waiting_time += (float)1;
     }
 
@@ -841,8 +845,9 @@ void refresh_waiting_time (t_list * list)
 
 void release_keys_and_unlock_esis(t_esi * esi)
 {
-	bool _does_esi_have_key(clave_bloqueada_por_esi_t* p)
+	bool _does_esi_have_key(void* q)
     {
+        clave_bloqueada_por_esi_t * p = (clave_bloqueada_por_esi_t *) q;
         return string_equals_ignore_case(p->esi_id, esi->name);
     }
 
@@ -861,8 +866,9 @@ void release_keys_and_unlock_esis(t_esi * esi)
 
 void release_key(char* key)
 {
-    bool _owns_key(clave_bloqueada_por_esi_t* p)
+    bool _owns_key(void* q)
     {
+        clave_bloqueada_por_esi_t * p = (clave_bloqueada_por_esi_t *) q;
         return((string_equals_ignore_case(p->esi_id, un_esi->name))
             && (string_equals_ignore_case(p->key, key)));
     }
@@ -878,8 +884,9 @@ void release_key(char* key)
 
 bool esi_has_key(char* key)
 {
-    bool _owns_key(clave_bloqueada_por_esi_t* p)
+    bool _owns_key(void* q)
     {
+        clave_bloqueada_por_esi_t * p = (clave_bloqueada_por_esi_t *) q;
         return((string_equals_ignore_case(p->esi_id, un_esi->name))
             && (string_equals_ignore_case(p->key, key)));
     }
@@ -889,8 +896,9 @@ bool esi_has_key(char* key)
 
 int is_key_blocked(char* key)
 {
-    int _is_key_taken(clave_bloqueada_por_esi_t* p)
+    bool _is_key_taken(void* q)
     {
+        clave_bloqueada_por_esi_t * p = (clave_bloqueada_por_esi_t *) q;
         log_info(logger, "key to check: %s key to block: %s", p->key, key);
         return string_equals_ignore_case(p->key, key);
     }
@@ -902,8 +910,9 @@ void log_all_blocked_keys(t_log * logger, t_list * claves_bloqueadas_por_esis)
 {
     log_info(logger, "List of blocked keys");
 
-    void _log_this(clave_bloqueada_por_esi_t * p)
+    void _log_this(void* q)
     {
+        clave_bloqueada_por_esi_t * p = (clave_bloqueada_por_esi_t *) q;
         log_info(logger, "%s", p->key);
     }
 

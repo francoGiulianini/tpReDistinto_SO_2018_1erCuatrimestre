@@ -220,8 +220,9 @@ void block_key_by_console(char * key, char * id)
 
 void unlock_key_by_console(char* key)
 {
-	void _log_all_ready_b(t_esi* p)
+	void _log_all_ready_b(void* q)
 	{
+		t_esi* p = (t_esi*) q;
 		log_info(logger, "In Ready queue before unlocking: %p", p->name);
 	}
 	list_iterate(lista_ready, _log_all_ready_b);
@@ -235,8 +236,9 @@ void unlock_key_by_console(char* key)
 		return;
 	}
 
-	bool _is_the_key(clave_bloqueada_por_esi_t * p)
+	bool _is_the_key(void* q)
 	{
+		clave_bloqueada_por_esi_t * p = (clave_bloqueada_por_esi_t *) q;
 		log_info(logger, "key blocked: %s key to unlock: %s", p->key, key);
 		return string_equals_ignore_case(p->key, key);
 	}
@@ -316,8 +318,9 @@ void unlock_key_by_console(char* key)
     }
     //sort_list_by_algorithm(lista_ready);		//Independientemente de los casos, reordeno lista_ready
     
-	void _log_all_ready_a(t_esi* p)
+	void _log_all_ready_a(void* q)
 	{
+		t_esi* p = (t_esi*) q;
 		log_info(logger, "In Ready queue after unlocking: %s", p->name);
 	}
 	list_iterate(lista_ready, _log_all_ready_a);
@@ -355,16 +358,22 @@ void get_key_status(char* key)
 {
 	clave_bloqueada_t* a_key = (clave_bloqueada_t*)malloc(sizeof(clave_bloqueada_t));
 	a_key = find_by_key(lista_bloqueados, key);
+
+	content_header* header = malloc(sizeof(content_header));
 	
 	if(a_key == NULL)//la clave nunca se pidio, entonces hay que simular
 	{	
 		printf("Requested Key doesnt exist\n");
 
 		//simular asignacion de instancia
-		send_header(socket_c, 33);
+		//send_header(socket_c, 33);
+		header->id = 33;
+		header->len = strlen(key);
+		header->len2 = 0;
+
+		send(socket_c, header, sizeof(content_header), 0);
 
 		send(socket_c, key, strlen(key), 0);
-		content_header* header = malloc(sizeof(content_header));
 
 		recv(socket_c, header, sizeof(content_header), 0);
 		if(header->id == 36)//instancia simulada
@@ -382,11 +391,18 @@ void get_key_status(char* key)
 	}
 	else//la clave fue pedida, recibir valor o instancia en la que está
 	{
-		send_header(socket_c, 33);
+		//send_header(socket_c, 33);
 
 		content_header* header = malloc(sizeof(content_header));
+		header->id = 33;
+		header->len = strlen(key);
+		header->len2 = 0;
 
-		recv(socket, header, sizeof(content_header), 0);
+		send(socket_c, header, sizeof(content_header), 0);
+
+		send(socket_c, key, strlen(key), 0);
+
+		recv(socket_c, header, sizeof(content_header), 0);
 
 		if(header->id == 37) //tiene valor asignado
 		{
@@ -426,28 +442,31 @@ void get_key_status(char* key)
 
 t_esi * find_by_id(t_list * lista, char* id)
 {
-	bool _is_this_one(t_esi* p)
+	bool _is_this_one(void* q)
 	{
+		t_esi* p = (t_esi*) q;
 		return string_equals_ignore_case(p->name, id);
 	}
 
 	return list_find(lista, _is_this_one);
 }
 
-t_esi * find_and_remove_by_id(t_list * lista, char* id)
+/*t_esi * find_and_remove_by_id(t_list * lista, char* id)
 {
-	bool _is_this_one(t_esi* p)
+	bool _is_this_one(void* q)
 	{
+		t_esi* p = (t_esi*) q
 		return string_equals_ignore_case(p->name, id);
 	}
 
 	return list_remove_by_condition(lista, _is_this_one);
-}
+}*/
 
 clave_bloqueada_t * find_by_key(t_list * lista, char* key)
 {
-	bool _is_this_the_one(clave_bloqueada_t* p)
+	bool _is_this_the_one(void* q)
 	{
+		clave_bloqueada_t* p = (clave_bloqueada_t*) q;
 		return string_equals_ignore_case(p->key, key);
 	}
 

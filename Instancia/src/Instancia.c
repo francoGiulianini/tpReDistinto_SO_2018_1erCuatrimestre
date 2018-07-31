@@ -466,7 +466,42 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 		
 			//avisar al coordinador que creo el archivo (ID = 12)
 			send_header(coordinator_socket, 12);
+
+			free(clave);
 			break;			
+		}
+		case 15:{//STATUS
+			char * clave = (char*)malloc (header->lenClave + 1);
+
+			recv(coordinator_socket, clave, header->lenClave + 1, 0);
+			//deserializar
+			clave[header->lenClave] = '\0';
+
+			char * value = get_value(tabla, clave);
+
+			content_header* header = malloc(sizeof(content_header));
+			if(value != NULL)
+			{
+				log_info(logger, "Value for key: %s is: %s", clave, value);
+				header->id = 13;
+				header->lenClave = 0;
+				header->lenValor = strlen(value);
+					
+				send(coordinator_socket, header, sizeof(content_header), 0);
+
+				send(coordinator_socket, value, strlen(value), 0);
+				
+				free(value);
+			}else{
+				log_info(logger, "No Value for key: %s", clave);
+				header->id = 19;
+				header->lenClave = 0;
+				header->lenValor = 0;
+					
+				send(coordinator_socket, header, sizeof(content_header), 0);
+			}
+			free(clave);
+			free(header);
 		}
 	}
 }
@@ -510,7 +545,9 @@ int free_entries(entrada_t * tabla)
 
 map_t * buscar_por_clave(t_list* lista_claves, char* clave)
 {
-	bool _es_esta(map_t* p){
+	bool _es_esta(void* q)
+	{
+		map_t* p = (map_t*) q;
 		return string_equals_ignore_case(p->clave, clave);
 	}
 
@@ -727,6 +764,26 @@ void dump(entrada_t * tabla)
 
 		log_info(logger, "Finished Dump");
 	}	
+}
+
+char* get_value(entrada_t * tabla, char * clave)
+{
+	int posicion = consultarTabla (tabla, clave);
+	if(posicion == -1)
+	{
+		return NULL;
+	}
+	else
+	{
+		int size = tabla[posicion].tamanio;
+		int place = posicion * configuracion->tamanioEntradas;
+		char* value = malloc(size + 1);
+
+		memcpy(value, mem + place, size);
+		value[size] = '\0';
+
+		return value;
+	}
 }
 
 int mkdir_p(const char *path)
