@@ -130,6 +130,7 @@ instance_t* choose_by_counter(t_list* lista, bool simulate);
 instance_t* choose_by_space(t_list* lista, bool simulate);
 instance_t* choose_by_letter(t_list* lista);
 instance_t* find_by_key(t_list* lista, char* key);
+instance_t* find_by_key_and_active(t_list* lista, char* key);
 t_list* find_by_free_space(t_list* lista);
 instance_t* find_by_letter(t_list* lista, char letter);
 _Algorithm to_algorithm(char* string);

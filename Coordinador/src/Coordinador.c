@@ -16,7 +16,6 @@ fd_set read_fds;
 int master_socket, new_socket;
 int addrlen = sizeof(serverAddress);
 char * welcome_message = "Welcome";
-int just_disconnected = 0;
 int instance_pointer = 0;
 int key_is_not_blocked = 1;
 int num_esi = 0;
@@ -441,6 +440,7 @@ void host_scheduler(void* arg)
     sem_wait(&one_esi);
     sem_wait(&one_instance);
     send_header(socket, 35);
+    sem_post(&one_instance);
 
     while(1)
     {
@@ -686,7 +686,7 @@ void operation_get(content_header* header, int socket, t_dictionary * blocked_ke
 
         dictionary_put(blocked_keys, message->key, NULL);
         send_header(socket, 23);
-    } 
+    }
 }
 
 void operation_set(content_header * header, int socket, t_dictionary * blocked_keys, char* name)
@@ -1067,7 +1067,7 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
     {    
         if(chosen_one->is_active)
         {
-            if(test_connection(chosen_one->socket) == true);//la instancia se desconecto
+            if(test_connection(chosen_one->socket) == true)//la instancia sigue conectada?
             {
                 log_info(logger, "%s has the key", chosen_one->name);
                 sem_post(&chosen_one->start);
@@ -1076,20 +1076,27 @@ void assign_instance(_Algorithm algorithm, t_list* instances)
         }
     }
 
-    bool still_connected = false;
+    //semaforo contador de instancias
+    sem_wait(&one_instance);
 
-    while(!still_connected)
+    chosen_one = choose_instance(false);
+    log_info(logger, "Choosing instance");
+
+    while(1)
     {
-        chosen_one = choose_instance(false);
-        log_info(logger, "Choosing instance");
-
         if(test_connection(chosen_one->socket) == true)
-            still_connected = true;
+            break;
+        else
+        {
+            chosen_one = choose_instance(false);
+            log_info(logger, "Choosing instance");
+        }
     }
 
 	log_info(logger, "%s was chosen to store key: %s", chosen_one->name, message->key);
 	dictionary_put(chosen_one->keys, message->key, NULL);
 
+    sem_post(&one_instance);
 	sem_post(&chosen_one->start);
 }
 
@@ -1139,9 +1146,25 @@ int save_on_instance(t_list* instances)
         return 1;
     }
     else
-    {
-        log_warning(logger, "Instance has key but is not active");
-        return 0;
+    {       
+        instance_t* chosen_one = find_by_key_and_active(instances, message->key);
+        if(chosen_one == NULL)
+        {
+            log_warning(logger, "Instance has key but is not active");       
+            return 0;
+        }
+        else
+        {
+            if(!test_connection(chosen_one->socket))
+            {
+                log_warning(logger, "Instance has key but is not active");
+                return 0;
+            }
+
+            sem_post(&chosen_one->start);
+            log_info(logger, "Saving Key on %s", chosen_one->name);
+            return 1;
+        }
     }
 }
 
@@ -1241,12 +1264,15 @@ void disconnect_instance_in_list(int socket)
 		instance->letter_min = 0;
 		instance->letter_max = 0;
 
-		if(algorithm == KE)
-			assign_letters();
-
         //pthread_mutex_unlock(&instance->start);
-        list_add(instances, instance);
         log_info(logger, "Removed from list of active Instances");
+
+        sem_wait(&one_instance);
+
+        if(algorithm == KE)
+		{
+            assign_letters();
+        }
     }
     else
     {
@@ -1333,7 +1359,21 @@ instance_t* find_by_key(t_list* lista, char* key)
     bool _is_the_one(void* p) 
     {
         instance_t* q = (instance_t*)p;
-        dictionary_has_key(q->keys, key);
+        return dictionary_has_key(q->keys, key);
+    }
+
+    return list_find(instances, _is_the_one);
+}
+
+instance_t* find_by_key_and_active(t_list* lista, char* key)
+{
+    bool _is_the_one(void* p) 
+    {
+        instance_t* q = (instance_t*)p;
+        bool a = dictionary_has_key(q->keys, key);
+        bool b = (bool)q->is_active;
+
+        return a && b;
     }
 
     return list_find(instances, _is_the_one);
