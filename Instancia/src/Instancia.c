@@ -46,6 +46,7 @@ int main(void)
 	for (int i = 0; i < configuracion->cantEntradas; i++){
 		strcpy(tabla[i].clave, "vacio");
 		tabla[i].age = 0;
+		tabla[i].tamanio = 0;
 	}
 
 	lista_claves = list_create();
@@ -258,15 +259,9 @@ int consultarTabla (entrada_t* tabla, char* clave){
 }
 
 void guardarEnMem (content* mensaje, int posicion){
-
 	//////// GUARDADO EN MEMORIA
 	int ubicacionEnMem = posicion * configuracion->tamanioEntradas;
 	memcpy (mem + ubicacionEnMem , mensaje->valor , strlen(mensaje->valor) + 1);
-
-	//////////HASTA ACA GUARDADO EN MEMORIA
-
-	//aca hay que escribir el archivo	
-	//buscar en la lista la claves	
 }
 
 int revisarLista(char* clave)
@@ -343,7 +338,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			break;
 		}
 
-		case 12 : { //SET			
+		case 12 : { //SET
 			char *mensaje_recv = malloc (header->lenClave + header->lenValor);
 
 			content* mensaje = (content*)malloc(sizeof(content));
@@ -356,7 +351,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 			mensaje->clave[header->lenClave] = '\0';
 			memcpy(mensaje->valor, mensaje_recv + header->lenClave, header->lenValor);
 			mensaje->valor[header->lenValor] = '\0';
-
 			free(mensaje_recv);
 
 			log_info(logger, "Key: %s, Value: %s", mensaje->clave, mensaje->valor);			
@@ -400,7 +394,6 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 				// recorro la tabla de punta a punta envejeciendo todo y actualizo el valor de laMasVieja
 				int posicion = consultarTablaLRU (tabla, mensaje, &laMasVieja);
 				log_info(logger, "la Clave mas vieja atomica: %d", laMasVieja);
-				//log_info(logger, "posicion luego de consultarTablaLRU: %d",posicion);
 				if (posicion != -1){ // Si encontro la clave en la tabla, libera las entradas si ahora ocupara menos
 					log_info(logger, "La clave ya existe");
 					int e = posicion + cantPaginas;
@@ -629,33 +622,37 @@ int getCantPaginas (int tamanioMensaje){
 }
 
 void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
-
-	//POSIBLEMENTE HAY QUE REHACER
-	//(indexCiruclar solo deberia usarse para reemplazar claves)
-	/*Los pasos a seguir tanto para circ y lru son:
-		1. encontrar un lugar vacio
-		2a. no hay lugar, compactar
-			3. encontrar otra vez un lugar vacio
-			4. no hay lugar, reemplazar (usando algoritmo)
-
-		2b. ubicar en ese lugar*/
 	
+	int tam = 0 ;
 	if (configuracion->cantEntradas - indexCircular >= cantPaginas){ 
 	// Si hay lugares libres en la tabla (sin contar lo que sea propio de la fragmentacion).
 		
-		for (int i = indexCircular; i < (indexCircular + cantPaginas); i++){
-			//guardar en tabla el tamaño del valor
-			strcpy(tabla[i].clave , mensaje->clave);
-			tabla[i].tamanio = strlen(mensaje->valor);
-			tabla[i].age = 0;
-			comienzoDeEntradasLibres++;
-		}						
-		guardarEnMem(mensaje, indexCircular);
-		indexCircular = indexCircular + cantPaginas;
+		if (tabla[indexCircular].tamanio > configuracion->tamanioEntradas){
+		// Este if asegura que no se pisen entradas no-atomicas 
+			tam = getCantPaginas(tabla[indexCircular].tamanio);
+			indexCircular = indexCircular + tam;
+			guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
+					
+		}else{
+			for (int i = indexCircular; i < (indexCircular + cantPaginas); i++){
+				//guardar en tabla el tamaño del valor
+				strcpy(tabla[i].clave , mensaje->clave);
+				tabla[i].tamanio = strlen(mensaje->valor);
+				tabla[i].age = 0;
+				if (comienzoDeEntradasLibres < configuracion->cantEntradas){
+					comienzoDeEntradasLibres++;
+				}
+			}
+			
+			guardarEnMem(mensaje, indexCircular);
+			indexCircular = indexCircular + cantPaginas;
+		}					
+		
 	} else {
 	// Si no hay suficiente lugar libre: se compacta y el indexCircular vuelve al principio			
 		switch (flagCompactar){
 			case 0 : {
+				log_info(logger, "en el case 0: ");
 				send_header(coordinator_socket, 11);//le aviso al coordinador que tengo que compactar
 				compactar(tabla);
 				flagCompactar = 1;
@@ -663,6 +660,7 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 				break;
 			}
 			case 1 : {
+				log_info(logger, "en el case 1: ");
 				indexCircular = 0;
 				flagCompactar = 0;
 				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
