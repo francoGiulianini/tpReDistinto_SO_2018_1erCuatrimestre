@@ -251,18 +251,27 @@ void send_parsed_operation(t_esi_operacion parsed)
 		switch (buffer->id)
 		{
 			case 23:
-				if(!feof(script))
+			{
+				int c;
+				do
 				{
-					flag_blocked = false;
-					send_message(scheduler_socket, 22, "", "");
-					destruir_operacion(parsed);
-				}
-				else
-				{
-					send_message(scheduler_socket, 24, "", "");
-					exit(EXIT_SUCCESS);
-				}
+					c = fgetc(script);
+					
+					if(c == EOF)
+					{
+						log_info(logger, "Finished");
+						send_message(scheduler_socket, 24, "", "");
+						exit(EXIT_SUCCESS);
+					}
+				}while(c == '\n' || c == ' ');
+				
+				ungetc(c, script);
+				flag_blocked = false;
+				send_message(scheduler_socket, 22, "", "");
+				destruir_operacion(parsed);
+				
 				break;
+			}
 			case 22:
 				flag_blocked = true;
 				send_message(scheduler_socket, 23, "", "");
@@ -299,6 +308,14 @@ t_esi_operacion parse_line() {
 	}
 	else
 	{
+		//avisar primero al coordinador
+		send_message(coordinator_socket, 25, "", "");
+
+		content_header* buffer = malloc(sizeof(content_header));
+		recv(coordinator_socket, buffer, sizeof(content_header), 0);
+		free(buffer);
+
+		send_message(scheduler_socket, 25, "", "");
 		exit_with_error(logger, "unable to read line from script");
 	}
 }
