@@ -64,8 +64,15 @@ int main(void)
 	{
 		content_header *header = malloc (sizeof (content_header));
 
-		recv(coordinator_socket, header, sizeof (content_header), 0);
-
+		int result = recv(coordinator_socket, header, sizeof (content_header), 0);
+		if(result <= 0)
+		{
+			free(header);
+			printf("Coordinator is offline\n");
+			log_error(logger, "Coordinator disconnected");
+			return EXIT_FAILURE;
+		}
+		
 		pthread_mutex_lock(&mutex_dump);
 		procesarHeader (header, tabla);
 		pthread_mutex_unlock(&mutex_dump);
@@ -188,8 +195,7 @@ void recibirTamanos ()
 int consultarTablaCIRC (entrada_t* tabla, content* mensaje){
 // Se fija si la clave ya existe en la tabla devuelve esa posicion
 	
-	for (int i = 0; i <= comienzoDeEntradasLibres; i++){
-		
+	for (int i = 0; i < comienzoDeEntradasLibres; i++){
 		if (string_equals_ignore_case(tabla[i].clave, mensaje->clave)){
 			return i;
 		}
@@ -333,7 +339,7 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 	switch (header->id){
 		case 11 : { // compactar			
 
-			compactar(tabla);
+			compactar(tabla, true);
 			
 			break;
 		}
@@ -472,29 +478,30 @@ void procesarHeader (content_header* header, entrada_t* tabla){
 
 			char * value = get_value(tabla, clave);
 
-			content_header* header = malloc(sizeof(content_header));
+			content_header* header_s = malloc(sizeof(content_header));
 			if(value != NULL)
 			{
 				log_info(logger, "Value for key: %s is: %s", clave, value);
-				header->id = 13;
-				header->lenClave = 0;
-				header->lenValor = strlen(value);
+				header_s->id = 13;
+				header_s->lenClave = 0;
+				header_s->lenValor = strlen(value);
 					
-				send(coordinator_socket, header, sizeof(content_header), 0);
+				send(coordinator_socket, header_s, sizeof(content_header), 0);
 
 				send(coordinator_socket, value, strlen(value), 0);
 				
 				free(value);
 			}else{
 				log_info(logger, "No Value for key: %s", clave);
-				header->id = 19;
-				header->lenClave = 0;
-				header->lenValor = 0;
+				header_s->id = 19;
+				header_s->lenClave = 0;
+				header_s->lenValor = 0;
 					
-				send(coordinator_socket, header, sizeof(content_header), 0);
+				send(coordinator_socket, header_s, sizeof(content_header), 0);
 			}
 			free(clave);
-			free(header);
+			free(header_s);
+			break;
 		}
 	}
 }
@@ -547,7 +554,7 @@ map_t * buscar_por_clave(t_list* lista_claves, char* clave)
 	return list_find(lista_claves, _es_esta);
 }
 
-void compactar (entrada_t * tabla){
+void compactar (entrada_t * tabla, bool send_complete){
 
 	//Compactar tabla
 	log_info(logger, "Compactando");
@@ -591,8 +598,10 @@ void compactar (entrada_t * tabla){
 
 	// Una vez que se compacto, se actualiza el comienzoDeEntradasLibres
 	int e = 0;
-	while (0 != strcmp(tabla[e].clave, "vacio") && e < configuracion->cantEntradas){
+	while (0 != strcmp(tabla[e].clave, "vacio")){
 		e++;
+		if(e == configuracion->cantEntradas)
+			break;
 	}
 	comienzoDeEntradasLibres = e;
 	indexCircular = e;
@@ -604,7 +613,8 @@ void compactar (entrada_t * tabla){
 	}
 
 	printf("Done\n");
-	send_header(coordinator_socket, 12);//le aviso al coordinador que termino la compactacion
+	if(send_complete)
+		send_header(coordinator_socket, 12);//le aviso al coordinador que termino la compactacion
 }
 
 int getCantPaginas (int tamanioMensaje){
@@ -635,6 +645,8 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 					
 		}else{
 			for (int i = indexCircular; i < (indexCircular + cantPaginas); i++){
+				//unmapear la clave reemplazada
+				unmap_key(tabla[i].clave, tabla[i].tamanio);
 				//guardar en tabla el tamaño del valor
 				strcpy(tabla[i].clave , mensaje->clave);
 				tabla[i].tamanio = strlen(mensaje->valor);
@@ -654,7 +666,7 @@ void guardarEnTablaCIRC(entrada_t * tabla, content* mensaje, int cantPaginas){
 			case 0 : {
 				log_info(logger, "en el case 0: ");
 				send_header(coordinator_socket, 11);//le aviso al coordinador que tengo que compactar
-				compactar(tabla);
+				compactar(tabla, false);
 				flagCompactar = 1;
 				guardarEnTablaCIRC(tabla, mensaje, cantPaginas);
 				break;
@@ -676,6 +688,8 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int cantPaginas,int*
 	int posicion = buscarEspacioLibre (tabla, mensaje,cantPaginas);	
 	if (posicion != -1){
 		for (int x = posicion; x < posicion + cantPaginas; x++){
+			//unmapear la clave reemplazada
+			unmap_key(tabla[x].clave, tabla[x].tamanio);
 			//guardar en tabla el tamaño del valor
 			strcpy(tabla[x].clave , mensaje->clave);
 			tabla[x].tamanio = strlen(mensaje->valor);
@@ -685,7 +699,7 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int cantPaginas,int*
 	} else {
 		switch (flagCompactar){
 			case 0 : {
-				compactar(tabla);
+				compactar(tabla, false);
 				flagCompactar = 1;
 				guardarEnTablaLRU(tabla, mensaje, cantPaginas, laMasVieja);
 				break;
@@ -782,6 +796,27 @@ char* get_value(entrada_t * tabla, char * clave)
 
 		return value;
 	}
+}
+
+void unmap_key(char* clave, int tamanio)
+{
+	bool _buscar_clave(void* q)
+	{
+		map_t* p = (map_t*) q;
+		return string_equals_ignore_case(p->clave, clave);
+	}
+	
+	map_t* clave_reemplazada = list_remove_by_condition(lista_claves, _buscar_clave);
+
+	if(clave_reemplazada == NULL)
+		return;
+
+	int size = tamanio * configuracion->tamanioEntradas;
+
+	free(clave_reemplazada->clave);
+	munmap(clave_reemplazada->map, size);
+	close(clave_reemplazada->fd);
+	free(clave_reemplazada);
 }
 
 int mkdir_p(const char *path)

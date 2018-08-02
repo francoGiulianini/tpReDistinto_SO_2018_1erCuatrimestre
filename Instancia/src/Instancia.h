@@ -93,7 +93,7 @@ void send_header(int socket, int id);
 void send_header_with_length(int socket, int id, int len1, int len2);
 int free_entries(entrada_t * tabla);
 map_t * buscar_por_clave(t_list* lista_claves, char* clave);
-void compactar (entrada_t * tabla);
+void compactar (entrada_t * tabla, bool send_complete);
 int getCantPaginas (int tamanioMensaje);
 int consultarTablaCIRC (entrada_t* tabla, content* mensaje);
 int consultarTablaLRU (entrada_t* tabla, content* mensaje, int* laMasVieja);
@@ -103,6 +103,7 @@ void guardarEnTablaLRU(entrada_t * tabla, content* mensaje, int cantPaginas,int*
 void storeKey(entrada_t * tabla, char* clave);
 void dump(entrada_t * tabla);
 char* get_value(entrada_t * tabla, char * clave);
+void unmap_key(char* clave, int tamanio);
 /*ptrNodo crearNodo(char* clave);
 void insertarNodo(ptrLista* lista, char* clave);
 int estaEnLaLista(ptrNodo listaGETs, char* clave);*/

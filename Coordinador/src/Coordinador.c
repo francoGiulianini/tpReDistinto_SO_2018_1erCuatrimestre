@@ -742,8 +742,6 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
 		return;
 	}
 
-    sem_wait(&result_instance);
-
     if(!result)
     {
         log_info(logger, "But Instance was not available. Aborting ESI");
@@ -751,8 +749,17 @@ void operation_set(content_header * header, int socket, t_dictionary * blocked_k
     }
     else
     {
-        log_info(logger, "Operation Successful");
-        send_header(socket, 23); //operacion con exito
+        sem_wait(&result_instance);
+        if(result)
+        {
+            log_info(logger, "Operation Successful");
+            send_header(socket, 23); //operacion con exito
+        }
+        else
+        {
+            log_info(logger, "But Instance was not available. Aborting ESI");
+            abort_esi(socket, 2);
+        }
     }
 }
 
@@ -802,21 +809,27 @@ void operation_store(content_header* header, int socket, t_dictionary * blocked_
 		abort_esi(socket, 2);
 		return;
 	}  
-
-	sem_wait(&result_instance);
-
-	if (!result)
-	{
-		log_info(logger, "But Instance was not available or key was replaced. Aborting ESI");
-		abort_esi(socket, 2);
-		return;
-	}
-	else
-	{
-		log_info(logger, "Operation Successful");
-		send_header(socket, 23); //operacion con exito
-		dictionary_remove(blocked_keys, message->key);
-	}
+    
+    if(!result)
+    {
+        log_info(logger, "But Instance was not available. Aborting ESI");
+        abort_esi(socket, 2);
+    }
+    else
+    {
+        sem_wait(&result_instance);
+        if(result)
+        {
+            log_info(logger, "Operation Successful");
+            send_header(socket, 23); //operacion con exito
+            dictionary_remove(blocked_keys, message->key);
+        }
+        else
+        {
+            log_info(logger, "But Instance was not available. Aborting ESI");
+            abort_esi(socket, 2);
+        }
+    }
 }
 
 void operation_status(content_header* header, int socket)
@@ -986,6 +999,7 @@ void initiate_compactation(int socket)
     instances_to_compact = list_filter(instances, _active_instances);
     if(list_is_empty(instances_to_compact))
     {
+        log_info(logger, "Only one instance available for compact");
         return;
     }
 
@@ -1039,17 +1053,20 @@ void send_header(int socket, int id)
 
 bool test_connection(int socket)
 {
-    char buffer[10];
+    char buffer[1];
 
     int result = recv(socket, buffer, sizeof(buffer), MSG_PEEK | MSG_DONTWAIT);
     if(result == 0)
     {
-        log_warning(logger, "Disconnection");
+        log_warning(logger, "Test Connection: Disconnection");
         disconnect_socket(socket, true);
         return false;
     }
     else
+    {    
+        log_info(logger, "Test Connection: OK");
         return true;
+    }
 }
 
 instance_t* simulate_assignment()
