@@ -193,16 +193,37 @@ int null_argument(char* arg_console, char* for_logger)
 
 void block_key_by_console(char * key, char * id)
 {
-	/*sem_wait(&esi_executing);
+	sem_wait(&esi_executing);
 	pthread_mutex_lock(&pause_mutex);
 	//ver si esta ejecutando o en listo
 	t_esi * otro_esi = find_and_remove_by_id(lista_ready, id);
 	
-	clave_bloqueada_t* un_key = find_by_key(lista_bloqueados, key);
+    clave_bloqueada_t* un_key = find_by_key(lista_bloqueados, key);
+    int key_len = strlen(key);
+    int id_len = strlen(un_esi->name);
 
-	//si la clave no existe crearla(ver en planificador.c)
+	if(un_key == NULL) //si no encuentra la clave en la lista, la crea
+	{
+		log_info(logger, "Requested Key doesnt exist, Adding Key to list");
+        un_key = malloc(sizeof(clave_bloqueada_t));
+        un_key->key = malloc(key_len * sizeof(char) + 1);
+        strcpy(un_key->key, key);
+        un_key->cola_esis_bloqueados = queue_create();
 
-	if(!otro_esi == NULL) //esta en cola listo
+        list_add(lista_bloqueados, un_key);
+
+        clave_bloqueada_por_esi_t* nueva_clave = malloc(sizeof(clave_bloqueada_por_esi_t));
+        nueva_clave->esi_id = malloc(id_len * sizeof(char) + 1);
+        strcpy(nueva_clave->esi_id, id);
+        nueva_clave->key = malloc(key_len * sizeof(char) + 1);
+        strcpy(nueva_clave->key, key);
+        list_add(claves_bloqueadas_por_esis, nueva_clave); //Reservo la clave como bloqueada para que la use el esi que esta ejecutando (tecnicamente no esta bloqueada aun, eso lo hace el coordinador)
+        log_info(logger, "New key blocked: %s by %s ",nueva_clave->key, nueva_clave->esi_id);
+        log_all_blocked_keys(logger, claves_bloqueadas_por_esis);
+        return;
+	}
+
+	if(otro_esi != NULL) //esta en cola listo
 	{	
 		//otro_esi->console_blocked = 1;
 		queue_push(un_key->cola_esis_bloqueados, otro_esi);
@@ -210,12 +231,10 @@ void block_key_by_console(char * key, char * id)
 	else	//esta en ejecucion
 	{
 		queue_push(un_key->cola_esis_bloqueados, un_esi);
-		blocked_esi_by_console = 1;
-		fin_de_esi = 1;
 	}
 
 	list_add(lista_bloqueados, un_key);
-	pthread_mutex_unlock(&pause_mutex);*/
+	pthread_mutex_unlock(&pause_mutex);
 }
 
 void unlock_key_by_console(char* key)
@@ -451,7 +470,7 @@ t_esi * find_by_id(t_list * lista, char* id)
 	return list_find(lista, _is_this_one);
 }
 
-/*t_esi * find_and_remove_by_id(t_list * lista, char* id)
+t_esi * find_and_remove_by_id(t_list * lista, char* id)
 {
 	bool _is_this_one(void* q)
 	{
@@ -460,7 +479,7 @@ t_esi * find_by_id(t_list * lista, char* id)
 	}
 
 	return list_remove_by_condition(lista, _is_this_one);
-}*/
+}
 
 clave_bloqueada_t * find_by_key(t_list * lista, char* key)
 {
